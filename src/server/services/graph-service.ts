@@ -208,8 +208,11 @@ export function buildGraph(projectId: string, extraction: unknown, blocks: Docum
   // Providers naturally cite raw block ids. Convert those citations to the persistent
   // Evidence ids created above before validation; this preserves the provenance chain.
   const evidenceByBlockId = new Map(evidence.map(item => [item.blockId, item.id]));
+  // Strict provenance: an item must cite real block ids. Items without evidence are NOT silently
+  // bound to the first evidence block (that collapsed every node onto one shared evidence and made
+  // confidence scores meaningless); they are rejected downstream as evidence-ungrounded.
   const withFallbackEvidence = <T extends { evidenceIds?: string[] }>(items: T[] | undefined) =>
-    (items ?? []).map(item => ({ ...item, evidenceIds: item.evidenceIds?.length ? item.evidenceIds.map(id => evidenceByBlockId.get(id) ?? id) : evidence.slice(0, 1).map(value => value.id) }));
+    (items ?? []).map(item => ({ ...item, evidenceIds: (item.evidenceIds ?? []).map(id => evidenceByBlockId.get(id) ?? id) }));
   const graph = buildEvidenceBoundGraph({
     projectId, evidence,
     entities: withFallbackEvidence(raw.entities ?? raw.nodes),
