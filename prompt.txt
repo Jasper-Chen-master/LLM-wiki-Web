@@ -1,0 +1,62 @@
+请修改当前 LLM Wiki Research Workspace。
+
+## 本次目标
+
+[用自然语言写你想修改的功能]
+
+## 用户体验
+
+当前：
+[当前是什么样]
+
+希望修改为：
+[希望是什么样]
+
+## 必须保持不变
+
+* 不改变现有核心产品架构，除非确有必要。
+* 不破坏现有 Research Profile → Document Analysis → Knowledge Graph 流程。
+* 不删除已有功能。
+* 不无故修改公共 API。
+* 不无故修改数据库 schema。
+* 不改变 DeepSeek Provider abstraction。
+* Evidence/source traceability 必须保留。
+
+## 实施方式
+
+开始前：
+
+1. 阅读 AGENTS.md。
+2. 阅读与本任务相关的 docs。
+3. 检查现有实现。
+4. 明确本修改涉及哪些模块。
+5. 判断是否适合拆给多个 subagents。
+6. 如果可以并行，将独立任务交给不同 subagents。
+7. 不允许不同 agents 无协调修改相同核心代码。
+8. 修改后进行 integration test。
+
+如果发现当前架构已有适合实现该需求的方式：
+
+优先复用。
+
+不要创建重复系统。
+
+## 完成标准
+
+完成后告诉我：
+
+* 修改了什么
+* 修改了哪些文件
+* 为什么这样实现
+* 是否修改 API / data model
+* 测试结果
+* 是否存在 regression risk
+* 下一步建议
+
+如果修改改变了 architecture：
+
+同步更新对应 docs。
+
+如果只是普通功能修改：
+
+不要无意义重构整个项目。
