@@ -27,6 +27,10 @@ import type {
 import { api } from "./api";
 
 type Language = "en" | "zh";
+const overviewDrafts = new Map<
+  string,
+  { selectedTemplate: string; profile: WikiProfile }
+>();
 const copy = {
   en: {
     delete: "Delete selected",
@@ -718,24 +722,37 @@ function Overview({
 }) {
   const { t, lang } = useI18n();
   const { project } = snapshot;
+  const projectId = project.id;
   const [profile, setProfile] = useState<WikiProfile>(
-    project.profile ?? emptyProfile,
+    () => overviewDrafts.get(projectId)?.profile ?? project.profile ?? emptyProfile,
   );
   const [saving, setSaving] = useState(false),
     [error, setError] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
-    [selectedTemplate, setSelectedTemplate] = useState<string>("custom"),
+    [selectedTemplate, setSelectedTemplate] = useState<string>(
+      () => overviewDrafts.get(projectId)?.selectedTemplate ?? "custom",
+    ),
     [templateHint, setTemplateHint] = useState("");
   useEffect(() => {
-    setProfile(project.profile ?? emptyProfile);
-  }, [project.id]);
+    overviewDrafts.set(projectId, { selectedTemplate, profile });
+  }, [projectId, selectedTemplate, profile]);
+  // 项目切换（snapshot 更新为新项目）时，重置为该项目的草稿或服务端 profile，避免串项目
+  useEffect(() => {
+    const draft = overviewDrafts.get(projectId);
+    setProfile(draft?.profile ?? project.profile ?? emptyProfile);
+    setSelectedTemplate(draft?.selectedTemplate ?? "custom");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
   useEffect(() => {
     setSelected((previous) =>
       previous.filter((id) => snapshot.documents.some((d) => d.id === id)),
     );
   }, [snapshot.documents]);
+  const prevLang = useRef(lang);
   useEffect(() => {
     if (selectedTemplate === "custom") return;
+    if (prevLang.current === lang) return;
+    prevLang.current = lang;
     const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
     if (!template) return;
     setProfile({ ...template[lang] });
