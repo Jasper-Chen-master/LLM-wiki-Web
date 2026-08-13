@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import type { DocumentBlock, Evidence, WikiEdge, WikiNode } from "../../shared/contracts.js";
+import type { PersistedState } from "../store.js";
 
 /** A minimal extraction shape so providers can evolve without leaking into graph persistence. */
 export interface ExtractedEntity {
@@ -219,4 +220,67 @@ export function buildGraph(projectId: string, extraction: unknown, blocks: Docum
     relations: withFallbackEvidence(raw.relations ?? raw.edges),
   });
   return { ...graph, evidence };
+}
+
+/**
+ * Removes evidence derived from documents that are no longer part of a project, then prunes
+ * only the graph records which no longer have any supporting evidence. This intentionally
+ * leaves shared nodes and relations intact when another document still supports them.
+ */
+export function removeDocumentKnowledge(state: PersistedState, projectId: string, documentIds: Set<string>) {
+  if (!documentIds.size) return;
+  const removedEvidenceIds = new Set(state.evidence.filter(item => documentIds.has(item.documentId)).map(item => item.id));
+  state.blocks = state.blocks.filter(block => !documentIds.has(block.documentId));
+  state.evidence = state.evidence.filter(item => !removedEvidenceIds.has(item.id));
+
+  const isProjectNode = (node: WikiNode) => node.id.startsWith(`${projectId}:`);
+  const isProjectEdge = (edge: WikiEdge) => edge.id.startsWith(`${projectId}:`);
+  const survivingNodes = state.nodes.map(node => isProjectNode(node)
+    ? { ...node, evidenceIds: node.evidenceIds.filter(id => !removedEvidenceIds.has(id)) }
+    : node,
+  ).filter(node => !isProjectNode(node) || node.evidenceIds.length > 0);
+  const survivingNodeIds = new Set(survivingNodes.map(node => node.id));
+  state.nodes = survivingNodes;
+  state.edges = state.edges.map(edge => isProjectEdge(edge)
+    ? { ...edge, evidenceIds: edge.evidenceIds.filter(id => !removedEvidenceIds.has(id)) }
+    : edge,
+  ).filter(edge => !isProjectEdge(edge) || (
+    edge.evidenceIds.length > 0 && survivingNodeIds.has(edge.sourceNodeId) && survivingNodeIds.has(edge.targetNodeId)
+  ));
+}
+
+/** Merges an incrementally-built graph while preserving stable node and edge identifiers. */
+export function mergeGraphInto(state: PersistedState, projectId: string, graph: Pick<GraphBuildResult, "nodes" | "edges"> & { evidence: Evidence[] }) {
+  state.evidence.push(...graph.evidence);
+  const nodeById = new Map(state.nodes.map((node, index) => [node.id, index]));
+  for (const node of graph.nodes) {
+    const existingIndex = nodeById.get(node.id);
+    if (existingIndex === undefined) { nodeById.set(node.id, state.nodes.push(node) - 1); continue; }
+    const existing = state.nodes[existingIndex];
+    const incomingHasHigherConfidence = node.confidence > existing.confidence;
+    const incomingHasHigherImportance = node.importance > existing.importance;
+    state.nodes[existingIndex] = {
+      ...existing,
+      evidenceIds: unique([...existing.evidenceIds, ...node.evidenceIds]),
+      properties: Object.assign({}, existing.properties, node.properties),
+      summary: existing.summary || node.summary,
+      confidence: Math.max(existing.confidence, node.confidence),
+      confidenceReason: incomingHasHigherConfidence ? node.confidenceReason : existing.confidenceReason,
+      importance: Math.max(existing.importance, node.importance),
+      importanceReason: incomingHasHigherImportance ? node.importanceReason : existing.importanceReason,
+    };
+  }
+  const edgeById = new Map(state.edges.map((edge, index) => [edge.id, index]));
+  for (const edge of graph.edges) {
+    const existingIndex = edgeById.get(edge.id);
+    if (existingIndex === undefined) { edgeById.set(edge.id, state.edges.push(edge) - 1); continue; }
+    const existing = state.edges[existingIndex];
+    const incomingHasHigherConfidence = edge.confidence > existing.confidence;
+    state.edges[existingIndex] = {
+      ...existing,
+      evidenceIds: unique([...existing.evidenceIds, ...edge.evidenceIds]),
+      confidence: Math.max(existing.confidence, edge.confidence),
+      confidenceReason: incomingHasHigherConfidence ? edge.confidenceReason : existing.confidenceReason,
+    };
+  }
 }
