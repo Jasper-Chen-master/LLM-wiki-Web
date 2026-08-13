@@ -12,6 +12,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   aiStatus: () => request<{ provider: "deepseek" | "demo"; configured: boolean }>("/api/ai-status"),
   projects: () => request<Project[]>("/api/projects"),
+  deleteProjects: (ids: string[]) => request<{ deleted: number }>("/api/projects", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) }),
   createProject: (name: string) => request<Project>("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }),
   snapshot: (id: string) => request<ProjectSnapshot>(`/api/projects/${id}`),
   updateProfile: (id: string, profile: WikiProfile) => request<Project>(`/api/projects/${id}/profile`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profile) }),

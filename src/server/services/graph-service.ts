@@ -135,6 +135,17 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
       evidenceIds: valid, relationStatus: relation.relationStatus ?? "inferred",
     });
   }
+  // If the model omitted semantic links, connect concepts co-mentioned in the same evidence
+  // block. These edges are explicitly marked inferred and retain the shared source evidence.
+  const byEvidence = new Map<string, WikiNode[]>();
+  for (const node of nodes) for (const evidenceId of node.evidenceIds) byEvidence.set(evidenceId, [...(byEvidence.get(evidenceId) ?? []), node]);
+  for (const [evidenceId, members] of byEvidence) {
+    for (let index = 0; index < Math.min(members.length, 8); index++) for (let other = index + 1; other < Math.min(members.length, 8); other++) {
+      const source = members[index], target = members[other]; const key = `${source.id}|related_to|${target.id}`;
+      if (edgeMap.has(key)) continue;
+      edgeMap.set(key, { id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id, relationType: "related_to", direction: "directed", confidence: 0.35, evidenceIds: [evidenceId], relationStatus: "inferred" });
+    }
+  }
   return { nodes, edges: [...edgeMap.values()], rejected };
 }
 

@@ -29,7 +29,7 @@ export async function generateStructured<T>(provider: LLMProvider, request: Gene
       prompt = `${request.prompt}\n\nYour previous response was invalid. Return only one JSON object that conforms to the requested schema. Validation issue: ${error instanceof Error ? error.message : "unknown"}`;
     }
   }
-  throw new StructuredOutputError(`Structured LLM output failed validation: ${lastError instanceof Error ? lastError.message : "unknown error"}`, retries + 1);
+  throw new StructuredOutputError(`AI response format could not be validated after ${retries + 1} attempts: ${lastError instanceof Error ? lastError.message : "unknown error"}`, retries + 1);
 }
 
 export class DemoLLMProvider implements LLMProvider {
@@ -42,16 +42,19 @@ export class DemoLLMProvider implements LLMProvider {
 export class DeepSeekProvider implements LLMProvider {
   constructor(private readonly apiKey: string, private readonly baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com", private readonly model = process.env.DEEPSEEK_MODEL ?? "deepseek-chat") {}
   async generate(request: GenerateRequest): Promise<GenerateResult> {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.model, temperature: request.temperature ?? 0, messages: [{ role: "system", content: request.system ?? "You are a precise research assistant." }, { role: "user", content: request.prompt }] })
-    });
-    if (!response.ok) throw new Error(`DeepSeek request failed (${response.status})`);
-    const body: unknown = await response.json();
-    const text = (body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text.trim()) throw new Error("DeepSeek returned no message content");
-    return { text, provider: "deepseek" };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45_000);
+      try {
+        const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", signal: controller.signal, headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: this.model, temperature: request.temperature ?? 0, messages: [{ role: "system", content: request.system ?? "You are a precise research assistant." }, { role: "user", content: request.prompt }] }) });
+        if (!response.ok) { if (response.status < 500 && response.status !== 429) throw new Error(`DeepSeek request failed (${response.status})`); throw new Error(`DeepSeek temporary failure (${response.status})`); }
+        const body: unknown = await response.json(); const text = (body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
+        if (typeof text !== "string" || !text.trim()) throw new Error("DeepSeek returned no message content");
+        return { text, provider: "deepseek" };
+      } catch (error) { lastError = error; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 700 * 2 ** attempt)); }
+      finally { clearTimeout(timeout); }
+    }
+    throw new Error(`DeepSeek remained unavailable after 3 attempts: ${lastError instanceof Error ? lastError.message : "network failure"}`);
   }
 }
 
