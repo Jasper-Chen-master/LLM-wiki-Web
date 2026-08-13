@@ -223,8 +223,10 @@ const templateCopy = {
     outputLanguage: "Output language",
     templateHint:
       "Pick a template to pre-fill the profile, or choose Custom to upload your own profile document.",
-    templateNoSources:
-      "Template applied. Upload source documents before building the knowledge graph.",
+     templateNoSources:
+       "Template applied. Upload source documents before building the knowledge graph.",
+    templateApplied:
+      'Template applied. Click "Confirm & build graph" to start processing.',
   },
   zh: {
     templates: "模板",
@@ -238,6 +240,7 @@ const templateCopy = {
     templateHint:
       "选择一个模板自动填充提取偏好，或选择「自定义」上传你自己的研究偏好文件。",
     templateNoSources: "模板已填充。请先上传源文档，再构建知识图谱。",
+    templateApplied: "模板已填充。点击“确认并构建图谱”开始处理。",
   },
 } as const;
 type Copy = { [K in keyof typeof copy.en]: string } & {
@@ -744,22 +747,12 @@ function Overview({
   const applyTemplate = async (templateId: keyof typeof PRESET_TEMPLATES) => {
     const template = PRESET_TEMPLATES[templateId][lang];
     setSelectedTemplate(templateId);
-    setTemplateHint("");
     setProfile({ ...template });
-    if (!snapshot.documents.some((document) => document.role === "source")) {
-      setTemplateHint(t.templateNoSources);
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.updateProfile(project.id, template);
-      await api.confirm(project.id);
-      await reload();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    setTemplateHint(
+      snapshot.documents.some((document) => document.role === "source")
+        ? t.templateApplied
+        : t.templateNoSources,
+    );
   };
   const selectCustom = () => {
     setSelectedTemplate("custom");
@@ -797,6 +790,7 @@ function Overview({
   const confirm = async () => {
     setSaving(true);
     try {
+      await api.updateProfile(project.id, profile);
       await api.confirm(project.id);
       await reload();
     } catch (e) {
@@ -1063,16 +1057,17 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
     [pan, setPan] = useState({ x: 0, y: 0 }),
     [drag, setDrag] = useState<{ x: number; y: number }>();
   const types = useMemo(
-    () => [...new Set(snapshot.nodes.map((node) => node.type))],
+    () =>
+      [...new Set(snapshot.nodes.map((node) => node.type.trim()))].sort(),
     [snapshot.nodes],
   );
   const colorFor = (type: string) =>
-    TYPE_COLORS[types.indexOf(type) % TYPE_COLORS.length];
+    TYPE_COLORS[types.indexOf(type.trim()) % TYPE_COLORS.length];
   const nodes = useMemo(
     () =>
       snapshot.nodes.filter(
         (n) =>
-          (type === "all" || n.type === type) &&
+          (type === "all" || n.type.trim() === type.trim()) &&
           `${n.displayName} ${n.summary}`
             .toLowerCase()
             .includes(query.toLowerCase()),
@@ -1230,6 +1225,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                       <circle
                         r={active ? radius + 3 : radius}
                         fill={active ? "#152338" : colorFor(node.type)}
+                        style={{ fill: active ? "#152338" : colorFor(node.type) }}
                         className={active ? "active" : ""}
                       />
                       {zoom >= 0.6 && (
