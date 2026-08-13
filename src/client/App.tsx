@@ -1099,7 +1099,8 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
       ),
     [snapshot.edges, shown],
   );
-  const positions = useMemo(() => layoutNodes(nodes, edges), [nodes, edges]);
+  const layout = useMemo(() => layoutNodes(nodes, edges), [nodes, edges]);
+  const positions = layout.positions;
   const evidence = selected
     ? snapshot.evidence.filter((item) => selected.evidenceIds.includes(item.id))
     : [];
@@ -1192,7 +1193,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
               ))}
             </div>
             <svg
-              viewBox="0 0 1100 760"
+              viewBox={`0 0 ${layout.width} ${layout.height}`}
               onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
               onPointerMove={(e) => {
                 if (drag) {
@@ -1229,6 +1230,9 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                   const p = positions.get(node.id)!;
                   const active = selected?.id === node.id;
                   const radius = 6 + node.importance * 6;
+                  const labelAnchor = p.x < layout.center.x - 4 ? "end" : p.x > layout.center.x + 4 ? "start" : "middle";
+                  const labelX = p.x < layout.center.x - 4 ? -radius - 5 : p.x > layout.center.x + 4 ? radius + 5 : 0;
+                  const labelY = Math.abs(p.x - layout.center.x) <= 4 ? (p.y < layout.center.y ? -radius - 6 : radius + 14) : 4;
                   return (
                     <g
                       key={node.id}
@@ -1246,7 +1250,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                         className={active ? "active" : ""}
                       />
                       {zoom >= 0.6 && (
-                        <text x={radius + 4} y="3">
+                        <text x={labelX} y={labelY} textAnchor={labelAnchor}>
                           {node.displayName.slice(0, 24)}
                         </text>
                       )}
@@ -1347,47 +1351,80 @@ const TYPE_COLORS = [
   "#636e72",
 ];
 
-function layoutNodes(nodes: WikiNode[], _edges: ProjectSnapshot["edges"]) {
+type GraphLayout = {
+  positions: Map<string, { x: number; y: number }>;
+  center: { x: number; y: number };
+  maxOuterRadius: number;
+  width: number;
+  height: number;
+};
+
+function layoutNodes(nodes: WikiNode[], _edges: ProjectSnapshot["edges"]): GraphLayout {
   const count = nodes.length;
   const positions = new Map<string, { x: number; y: number }>();
-  if (!count) return positions;
-  const center = { x: 550, y: 380 };
-  if (count === 1) {
-    positions.set(nodes[0].id, center);
-    return positions;
+  if (!count) {
+    return { positions, center: { x: 400, y: 300 }, maxOuterRadius: 0, width: 800, height: 600 };
   }
-  // 同一 type 固定在同一同心圆环带；type 首次出现的顺序决定由内到外的顺序。
+
+  // The layout grows with the data set. Labels are capped at the same 24
+  // characters used by the renderer, so the arc budget remains predictable.
+  const labelWidth = 24 * 7;
+  const typeCount = new Set(nodes.map((node) => node.type.trim())).size;
+  const maxPerLayer = Math.max(
+    10,
+    Math.min(
+      14,
+      Math.floor((2 * Math.PI * (220 + Math.sqrt(count) * 18 + typeCount * 18)) / (labelWidth + 28)),
+    ),
+  );
+  const radialLayerSpacing = Math.max(16, Math.min(22, 14 + Math.sqrt(count)));
+  const innerRadius = Math.max(64, Math.min(120, 54 + typeCount * 4 + Math.sqrt(count) * 2));
+  const gap = Math.max(12, Math.min(24, 10 + Math.sqrt(count) * 0.6));
+
+  if (count === 1) {
+    const center = { x: 120, y: 100 };
+    positions.set(nodes[0].id, center);
+    return { positions, center, maxOuterRadius: 0, width: 240, height: 200 };
+  }
+
+  // One concentric band per type; first appearance still determines inner-to-outer order.
   const groups = new Map<string, WikiNode[]>();
   for (const node of nodes) {
-    const list = groups.get(node.type) ?? [];
+    const type = node.type.trim();
+    const list = groups.get(type) ?? [];
     list.push(node);
-    groups.set(node.type, list);
+    groups.set(type, list);
   }
   const typeOrder = [...groups.keys()];
-  const maxOuterRadius = 355;
-  const innerRadius = typeOrder.length <= 5 ? 70 : 55;
-  const gap = typeOrder.length <= 5 ? 15 : 8;
-  const bandWidth = Math.min(
-    45,
-    (maxOuterRadius - innerRadius - gap * (typeOrder.length - 1)) /
-      typeOrder.length,
-  );
+  const layerCounts = typeOrder.map((type) => Math.max(1, Math.ceil(groups.get(type)!.length / maxPerLayer)));
+  const bandWidth = Math.max(28, Math.max(...layerCounts) * radialLayerSpacing);
+  const maxOuterRadius = innerRadius + typeOrder.length * bandWidth + (typeOrder.length - 1) * gap;
+  const padding = labelWidth + 36;
+  const center = { x: maxOuterRadius + padding, y: maxOuterRadius + padding };
   typeOrder.forEach((type, g) => {
     const group = groups.get(type)!;
     const bandStart = innerRadius + g * (bandWidth + gap);
-    const layers = group.length > 22 ? 3 : group.length > 10 ? 2 : 1;
+    const layers = layerCounts[g];
     group.forEach((node, j) => {
-      const layer = j % layers;
+      const layer = Math.floor(j / maxPerLayer);
+      const layerNodes = group.slice(layer * maxPerLayer, Math.min(group.length, (layer + 1) * maxPerLayer));
+      const indexInLayer = j - layer * maxPerLayer;
       const radius = bandStart + (bandWidth * (layer + 0.5)) / layers;
-      const angle = (Math.PI * 2 * j) / group.length +
-        (Math.PI * 2 * layer) / (group.length * layers * 2);
+      const angle = (Math.PI * 2 * indexInLayer) / layerNodes.length +
+        (layer % 2 ? Math.PI / layerNodes.length : 0);
       positions.set(node.id, {
         x: center.x + Math.cos(angle) * radius,
         y: center.y + Math.sin(angle) * radius,
       });
     });
   });
-  return positions;
+  return {
+    positions,
+    center,
+    maxOuterRadius,
+    width: center.x * 2,
+    height: center.y * 2,
+  };
 }
 
 function SearchView({ snapshot }: { snapshot: ProjectSnapshot }) {
