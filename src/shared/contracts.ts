@@ -18,8 +18,8 @@ export interface Project { id: string; name: string; createdAt: string; profile?
 export interface DocumentRecord { id: string; projectId: string; fileName: string; storagePath?: string; kind: DocumentKind; role: "source" | "profile"; status: "uploaded" | "parsed" | "failed"; error?: string; uploadedAt: string; }
 export interface DocumentBlock { id: string; documentId: string; page: number; section?: string; blockType: "paragraph" | "heading" | "table"; text: string; sourceLocation: string; }
 export interface Evidence { id: string; documentId: string; page: number; section?: string; blockId: string; originalText: string; status: "observed" | "reported" | "inferred"; }
-export interface WikiNode { id: string; canonicalName: string; displayName: string; type: string; aliases: string[]; summary: string; properties: Record<string, string | number>; importance: number; confidence: number; evidenceIds: string[]; }
-export interface WikiEdge { id: string; sourceNodeId: string; targetNodeId: string; relationType: string; direction: "directed"; confidence: number; evidenceIds: string[]; relationStatus: "observed" | "reported" | "inferred"; }
+export interface WikiNode { id: string; canonicalName: string; displayName: string; type: string; aliases: string[]; summary: string; properties: Record<string, string | number>; importance: number; importanceReason?: string; confidence: number; confidenceReason?: string; evidenceIds: string[]; }
+export interface WikiEdge { id: string; sourceNodeId: string; targetNodeId: string; relationType: string; direction: "directed"; confidence: number; confidenceReason?: string; evidenceIds: string[]; relationStatus: "observed" | "reported" | "inferred"; }
 export interface ProcessingJob { id: string; projectId: string; status: JobStatus; progress: number; message: string; errors: string[]; createdAt: string; updatedAt: string; }
 export interface SearchResult { nodes: WikiNode[]; edges: WikiEdge[]; evidence: Evidence[]; }
 export interface ProjectSnapshot { project: Project; documents: DocumentRecord[]; job?: ProcessingJob; nodes: WikiNode[]; edges: WikiEdge[]; evidence: Evidence[]; }

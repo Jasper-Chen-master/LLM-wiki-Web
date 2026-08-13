@@ -11,7 +11,9 @@ export interface ExtractedEntity {
   summary?: string;
   properties?: Record<string, string | number>;
   importance?: number;
+  importanceReason?: string;
   confidence?: number;
+  confidenceReason?: string;
   evidenceIds?: string[];
 }
 
@@ -20,6 +22,7 @@ export interface ExtractedRelation {
   target: string;
   relationType: string;
   confidence?: number;
+  confidenceReason?: string;
   evidenceIds?: string[];
   relationStatus?: WikiEdge["relationStatus"];
 }
@@ -58,6 +61,31 @@ export function normalizeEntityName(value: string): string {
 const unique = <T>(values: T[]) => [...new Set(values)];
 const clamp = (value: number | undefined, fallback: number) => Math.max(0, Math.min(1, value ?? fallback));
 
+type EvidenceSignal = { confidence: number; importance: number; confidenceReason: string; importanceReason: string };
+
+/**
+ * Scores are evidence-derived fallbacks, not guesses: repeated evidence, independent source
+ * documents, and sufficiently substantive source text increase the score with diminishing
+ * returns. Provider scores remain available when explicitly accompanied by their rationale.
+ */
+function evidenceSignal(ids: string[], evidence: Evidence[], occurrences = 1, propertyCount = 0): EvidenceSignal {
+  const supporting = evidence.filter(item => ids.includes(item.id));
+  const documents = new Set(supporting.map(item => item.documentId));
+  const blocks = new Set(supporting.map(item => item.blockId));
+  const saturation = (count: number) => 1 - Math.exp(-count);
+  const evidenceCoverage = saturation(supporting.length);
+  const sourceDiversity = saturation(documents.size);
+  const blockDiversity = saturation(blocks.size);
+  const textSubstantiation = supporting.length
+    ? supporting.reduce((sum, item) => sum + Math.min(item.originalText.trim().length / 600, 1), 0) / supporting.length
+    : 0;
+  const repeatedMentions = saturation(occurrences);
+  const confidence = clamp(.12 + .38 * evidenceCoverage + .22 * sourceDiversity + .18 * textSubstantiation + .10 * blockDiversity, .12);
+  const importance = clamp(.08 + .27 * evidenceCoverage + .24 * blockDiversity + .18 * sourceDiversity + .13 * repeatedMentions + .10 * saturation(propertyCount), .08);
+  const basis = `${supporting.length} 条证据、${documents.size} 个来源文档、${blocks.size} 个证据块`;
+  return { confidence, importance, confidenceReason: `基于${basis}及原文完整度计算。`, importanceReason: `基于${basis}、重复出现次数和结构化属性覆盖度计算。` };
+}
+
 function validEvidenceIds(ids: string[] | undefined, evidenceIds: Set<string>) {
   const requested = unique(ids ?? []);
   return { valid: requested.filter(id => evidenceIds.has(id)), missing: requested.filter(id => !evidenceIds.has(id)) };
@@ -89,6 +117,16 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
     const aliases = unique(group.flatMap(item => [item.name, item.canonicalName ?? item.name, ...(item.aliases ?? [])]))
       .filter(alias => normalizeEntityName(alias) !== normalized);
     const properties = Object.assign({}, ...group.map(item => item.properties ?? {}));
+    const evidenceIds = unique(group.flatMap(item => item.evidenceIds ?? []));
+    const signal = evidenceSignal(evidenceIds, evidence, group.length, Object.keys(properties).length);
+    const scored = group.map(item => ({
+      importance: item.importance === undefined ? signal.importance : clamp(item.importance, signal.importance),
+      importanceReason: item.importanceReason ?? signal.importanceReason,
+      confidence: item.confidence === undefined ? signal.confidence : clamp(item.confidence, signal.confidence),
+      confidenceReason: item.confidenceReason ?? signal.confidenceReason,
+    }));
+    const bestImportance = scored.reduce((best, item) => item.importance > best.importance ? item : best);
+    const bestConfidence = scored.reduce((best, item) => item.confidence > best.confidence ? item : best);
     return {
       id: idFor(projectId, "node", normalized),
       canonicalName: primary.canonicalName ?? primary.name,
@@ -97,9 +135,9 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
       aliases,
       summary: group.map(item => item.summary).find(Boolean) ?? "",
       properties,
-      importance: Math.max(...group.map(item => clamp(item.importance, 0.5))),
-      confidence: Math.max(...group.map(item => clamp(item.confidence, 0.5))),
-      evidenceIds: unique(group.flatMap(item => item.evidenceIds ?? [])),
+      importance: bestImportance.importance, importanceReason: bestImportance.importanceReason,
+      confidence: bestConfidence.confidence, confidenceReason: bestConfidence.confidenceReason,
+      evidenceIds,
     } satisfies WikiNode;
   });
   return { nodes, rejected };
@@ -126,12 +164,18 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
     const existing = edgeMap.get(key);
     if (existing) {
       existing.evidenceIds = unique([...existing.evidenceIds, ...valid]);
-      existing.confidence = Math.max(existing.confidence, clamp(relation.confidence, 0.5));
+      const signal = evidenceSignal(existing.evidenceIds, input.evidence);
+      const candidateConfidence = relation.confidence === undefined ? signal.confidence : clamp(relation.confidence, signal.confidence);
+      if (candidateConfidence >= existing.confidence) {
+        existing.confidence = candidateConfidence;
+        existing.confidenceReason = relation.confidenceReason ?? signal.confidenceReason;
+      }
       continue;
     }
+    const signal = evidenceSignal(valid, input.evidence);
     edgeMap.set(key, {
       id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id,
-      relationType: relation.relationType.trim(), direction: "directed", confidence: clamp(relation.confidence, 0.5),
+      relationType: relation.relationType.trim(), direction: "directed", confidence: relation.confidence === undefined ? signal.confidence : clamp(relation.confidence, signal.confidence), confidenceReason: relation.confidenceReason ?? signal.confidenceReason,
       evidenceIds: valid, relationStatus: relation.relationStatus ?? "inferred",
     });
   }
@@ -143,7 +187,8 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
     for (let index = 0; index < Math.min(members.length, 8); index++) for (let other = index + 1; other < Math.min(members.length, 8); other++) {
       const source = members[index], target = members[other]; const key = `${source.id}|related_to|${target.id}`;
       if (edgeMap.has(key)) continue;
-      edgeMap.set(key, { id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id, relationType: "related_to", direction: "directed", confidence: 0.35, evidenceIds: [evidenceId], relationStatus: "inferred" });
+      const signal = evidenceSignal([evidenceId], input.evidence);
+      edgeMap.set(key, { id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id, relationType: "related_to", direction: "directed", confidence: signal.confidence, confidenceReason: `同一证据块共现；${signal.confidenceReason}`, evidenceIds: [evidenceId], relationStatus: "inferred" });
     }
   }
   return { nodes, edges: [...edgeMap.values()], rejected };
