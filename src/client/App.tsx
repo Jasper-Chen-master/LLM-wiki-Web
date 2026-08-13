@@ -1222,15 +1222,15 @@ function layoutNodes(nodes: WikiNode[], edges: ProjectSnapshot["edges"]) {
       0,
     );
     const angle = (Math.PI * 2 * index) / count + (seed % 100) / 1000;
-    const distance = Math.min(190, 70 + Math.sqrt(count) * 22) + (seed % 38);
+    const distance = Math.min(150, 60 + Math.sqrt(count) * 18) + (seed % 30);
     positions.set(node.id, {
       x: center.x + Math.cos(angle) * distance,
       y: center.y + Math.sin(angle) * distance,
     });
   });
   const idealDistance = Math.max(
-    48,
-    Math.min(125, Math.sqrt((980 * 690) / count) * 0.62),
+    40,
+    Math.min(110, Math.sqrt((980 * 690) / count) * 0.5),
   );
   let temperature = Math.min(40, 12 + Math.sqrt(count) * 6);
   for (let iteration = 0; iteration < 200; iteration += 1) {
@@ -1274,7 +1274,7 @@ function layoutNodes(nodes: WikiNode[], edges: ProjectSnapshot["edges"]) {
         idealDistance +
         radii.get(edge.sourceNodeId)! +
         radii.get(edge.targetNodeId)!;
-      const force = Math.max(0, distance - desired) * 0.08;
+      const force = Math.max(0, distance - desired) * 0.2;
       sd.x += (dx / distance) * force;
       sd.y += (dy / distance) * force;
       td.x -= (dx / distance) * force;
