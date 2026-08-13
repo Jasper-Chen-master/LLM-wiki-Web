@@ -269,9 +269,10 @@ const emptyProfile: WikiProfile = {
 };
 const PRESET_TEMPLATES: Record<
   "research" | "reading" | "personal-growth" | "general" | "business",
-  WikiProfile
+  { en: WikiProfile; zh: WikiProfile }
 > = {
   research: {
+    en: {
     version: "1.0",
     researchGoal:
       "Extract the core concepts, methods, evidence, and findings from academic papers or lecture notes, and connect them into a traceable knowledge structure.",
@@ -298,8 +299,24 @@ const PRESET_TEMPLATES: Record<
     extractTables: false,
     evidenceRequired: true,
     notes: "",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "从学术论文或课件中提取核心概念、方法、证据与结论，并将其连接为可追溯的知识结构。",
+      domain: "学术研究",
+      entityTypes: ["概念", "方法", "理论", "实验", "指标", "公式"],
+      importantFields: ["定义", "公式", "方法", "结论", "证据"],
+      preferredRelations: ["推导", "证明", "应用", "对比", "导致"],
+      exclude: [],
+      extractNumericData: true,
+      preserveUnits: true,
+      extractTables: false,
+      evidenceRequired: true,
+      notes: "",
+    },
   },
   reading: {
+    en: {
     version: "1.0",
     researchGoal:
       "Capture the key arguments, claims, and concepts from the reading, and map how the author builds and supports them.",
@@ -319,8 +336,24 @@ const PRESET_TEMPLATES: Record<
     extractTables: false,
     evidenceRequired: true,
     notes: "",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "捕捉阅读材料中的关键论点、主张与概念，梳理作者如何构建并支持论证。",
+      domain: "阅读笔记",
+      entityTypes: ["主题", "论点", "主张", "概念", "术语", "例子"],
+      importantFields: ["核心观点", "论证", "例子", "定义"],
+      preferredRelations: ["支持", "反驳", "引出", "举例", "对比"],
+      exclude: [],
+      extractNumericData: false,
+      preserveUnits: false,
+      extractTables: false,
+      evidenceRequired: true,
+      notes: "",
+    },
   },
   "personal-growth": {
+    en: {
     version: "1.0",
     researchGoal:
       "Extract actionable advice, habits, methods, and mental models that can be applied to improve oneself.",
@@ -347,8 +380,24 @@ const PRESET_TEMPLATES: Record<
     extractTables: false,
     evidenceRequired: true,
     notes: "",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "提取可行动的建议、习惯、方法与心智模型，用于自我提升。",
+      domain: "个人成长",
+      entityTypes: ["习惯", "方法", "原则", "心态", "工具", "行动项"],
+      importantFields: ["建议", "步骤", "原则", "行动"],
+      preferredRelations: ["促成", "需要", "实践", "应用", "避免"],
+      exclude: [],
+      extractNumericData: false,
+      preserveUnits: false,
+      extractTables: false,
+      evidenceRequired: true,
+      notes: "",
+    },
   },
   general: {
+    en: {
     version: "1.0",
     researchGoal:
       "Build a comprehensive knowledge map of the key concepts, entities, and relationships found in the document.",
@@ -362,8 +411,24 @@ const PRESET_TEMPLATES: Record<
     extractTables: false,
     evidenceRequired: true,
     notes: "",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "构建文档中关键概念、实体与关系的全面知识图谱。",
+      domain: "通用知识",
+      entityTypes: ["概念", "实体", "属性", "事件", "数据点"],
+      importantFields: ["定义", "属性", "关系"],
+      preferredRelations: ["相关", "包含", "属于", "影响"],
+      exclude: [],
+      extractNumericData: true,
+      preserveUnits: true,
+      extractTables: false,
+      evidenceRequired: true,
+      notes: "",
+    },
   },
   business: {
+    en: {
     version: "1.0",
     researchGoal:
       "Extract market, competitive, strategic, and financial information from business documents, and map the relationships between players, products, and metrics.",
@@ -390,6 +455,21 @@ const PRESET_TEMPLATES: Record<
     extractTables: true,
     evidenceRequired: true,
     notes: "",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "从商业文档中提取市场、竞争、战略与财务信息，梳理参与者、产品与指标之间的关系。",
+      domain: "商业分析",
+      entityTypes: ["公司", "产品", "市场", "战略", "指标", "趋势"],
+      importantFields: ["市场份额", "营收", "战略", "竞争"],
+      preferredRelations: ["竞争", "投资", "合作", "影响", "增长"],
+      exclude: [],
+      extractNumericData: true,
+      preserveUnits: true,
+      extractTables: true,
+      evidenceRequired: true,
+      notes: "",
+    },
   },
 };
 const split = (input: string) =>
@@ -649,12 +729,16 @@ function Overview({
       previous.filter((id) => snapshot.documents.some((d) => d.id === id)),
     );
   }, [project.profile, snapshot.documents]);
+  useEffect(() => {
+    if (selectedTemplate === "custom") return;
+    setProfile({ ...PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES][lang] });
+  }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
     value: WikiProfile[keyof WikiProfile],
   ) => setProfile((previous) => ({ ...previous, [key]: value }));
   const applyTemplate = async (templateId: keyof typeof PRESET_TEMPLATES) => {
-    const template = PRESET_TEMPLATES[templateId];
+    const template = PRESET_TEMPLATES[templateId][lang];
     setSelectedTemplate(templateId);
     setTemplateHint("");
     setProfile({ ...template });
@@ -1255,7 +1339,7 @@ function layoutNodes(nodes: WikiNode[], _edges: ProjectSnapshot["edges"]) {
     positions.set(nodes[0].id, center);
     return positions;
   }
-  // 环形分区布局：相同 type 的节点聚集在同一扇形扇区，整体排成一个圆环。
+  // 同一 type 固定在同一同心圆环带；type 首次出现的顺序决定由内到外的顺序。
   const groups = new Map<string, WikiNode[]>();
   for (const node of nodes) {
     const list = groups.get(node.type) ?? [];
@@ -1263,18 +1347,23 @@ function layoutNodes(nodes: WikiNode[], _edges: ProjectSnapshot["edges"]) {
     groups.set(node.type, list);
   }
   const typeOrder = [...groups.keys()];
-  const sector = (Math.PI * 2) / typeOrder.length;
-  const perRing = 10;
+  const maxOuterRadius = 355;
+  const innerRadius = typeOrder.length <= 5 ? 70 : 55;
+  const gap = typeOrder.length <= 5 ? 15 : 8;
+  const bandWidth = Math.min(
+    45,
+    (maxOuterRadius - innerRadius - gap * (typeOrder.length - 1)) /
+      typeOrder.length,
+  );
   typeOrder.forEach((type, g) => {
     const group = groups.get(type)!;
-    const start = g * sector;
+    const bandStart = innerRadius + g * (bandWidth + gap);
+    const layers = group.length > 22 ? 3 : group.length > 10 ? 2 : 1;
     group.forEach((node, j) => {
-      const ring = Math.floor(j / perRing);
-      const slot = j % perRing;
-      const radius = 125 + ring * 70;
-      const span = sector * 0.86;
-      const angle =
-        start + sector * 0.07 + (slot / Math.max(1, perRing - 1)) * span;
+      const layer = j % layers;
+      const radius = bandStart + (bandWidth * (layer + 0.5)) / layers;
+      const angle = (Math.PI * 2 * j) / group.length +
+        (Math.PI * 2 * layer) / (group.length * layers * 2);
       positions.set(node.id, {
         x: center.x + Math.cos(angle) * radius,
         y: center.y + Math.sin(angle) * radius,
