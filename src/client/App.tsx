@@ -1200,9 +1200,11 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
               }}
               onPointerMove={(e) => {
                 if (drag) {
+                  const displayScale =
+                    (canvasRef.current?.clientWidth ?? layout.width) / layout.width;
                   setPan((value) => ({
-                    x: value.x + e.clientX - drag.x,
-                    y: value.y + e.clientY - drag.y,
+                    x: value.x + (e.clientX - drag.x) / displayScale,
+                    y: value.y + (e.clientY - drag.y) / displayScale,
                   }));
                   setDrag({ x: e.clientX, y: e.clientY });
                 }
