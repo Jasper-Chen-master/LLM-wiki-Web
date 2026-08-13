@@ -10,7 +10,7 @@ export const WikiProfileSchema = z.object({
   entityTypes: z.array(z.string()).default([]), importantFields: z.array(z.string()).default([]),
   preferredRelations: z.array(z.string()).default([]), exclude: z.array(z.string()).default([]),
   extractNumericData: z.boolean().default(true), preserveUnits: z.boolean().default(true), extractTables: z.boolean().default(false),
-  evidenceRequired: z.boolean().default(true), notes: z.string().default("")
+  evidenceRequired: z.boolean().default(true), notes: z.string().default(""), outputLanguage: z.enum(["en", "zh"]).optional()
 });
 export type WikiProfile = z.infer<typeof WikiProfileSchema>;
 

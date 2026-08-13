@@ -220,6 +220,7 @@ const templateCopy = {
     general: "General",
     business: "Business",
     custom: "Custom",
+    outputLanguage: "Output language",
     templateHint:
       "Pick a template to pre-fill the profile, or choose Custom to upload your own profile document.",
     templateNoSources:
@@ -233,6 +234,7 @@ const templateCopy = {
     general: "通用",
     business: "商业分析",
     custom: "自定义",
+    outputLanguage: "输出语言",
     templateHint:
       "选择一个模板自动填充提取偏好，或选择「自定义」上传你自己的研究偏好文件。",
     templateNoSources: "模板已填充。请先上传源文档，再构建知识图谱。",
@@ -631,7 +633,7 @@ function Overview({
   snapshot: ProjectSnapshot;
   reload: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { project } = snapshot;
   const [profile, setProfile] = useState<WikiProfile>(
     project.profile ?? emptyProfile,
@@ -792,6 +794,19 @@ function Overview({
             </div>
           </div>
           {templateHint && <p className="template-help">{templateHint}</p>}
+          <div className="output-lang">
+            <label htmlFor="output-language">{t.outputLanguage}</label>
+            <select
+              id="output-language"
+              value={profile.outputLanguage ?? lang}
+              onChange={(e) =>
+                update("outputLanguage", e.target.value as "en" | "zh")
+              }
+            >
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
           <Field label={t.objective}>
             <textarea
               value={profile.researchGoal}
@@ -963,6 +978,8 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
     () => [...new Set(snapshot.nodes.map((node) => node.type))],
     [snapshot.nodes],
   );
+  const colorFor = (type: string) =>
+    TYPE_COLORS[types.indexOf(type) % TYPE_COLORS.length];
   const nodes = useMemo(
     () =>
       snapshot.nodes.filter(
@@ -1063,6 +1080,17 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
             <div className="graph-hint">
               滚轮缩放 · 拖拽平移 · 点击节点查看证据
             </div>
+            <div className="graph-legend">
+              {types.map((legendType) => (
+                <div className="legend-item" key={legendType}>
+                  <span
+                    className="legend-dot"
+                    style={{ background: colorFor(legendType) }}
+                  />
+                  <span>{legendType}</span>
+                </div>
+              ))}
+            </div>
             <svg
               viewBox="0 0 1100 760"
               onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
@@ -1113,6 +1141,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                     >
                       <circle
                         r={active ? radius + 3 : radius}
+                        fill={active ? "#152338" : colorFor(node.type)}
                         className={active ? "active" : ""}
                       />
                       {zoom >= 0.6 && (
@@ -1204,7 +1233,20 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
     </>
   );
 }
-function layoutNodes(nodes: WikiNode[], edges: ProjectSnapshot["edges"]) {
+const TYPE_COLORS = [
+  "#6c5ce7",
+  "#e17055",
+  "#00b894",
+  "#f39c12",
+  "#0984e3",
+  "#e84393",
+  "#00cec9",
+  "#a29bfe",
+  "#d63031",
+  "#636e72",
+];
+
+function layoutNodes(nodes: WikiNode[], _edges: ProjectSnapshot["edges"]) {
   const count = nodes.length;
   const positions = new Map<string, { x: number; y: number }>();
   if (!count) return positions;
@@ -1213,110 +1255,35 @@ function layoutNodes(nodes: WikiNode[], edges: ProjectSnapshot["edges"]) {
     positions.set(nodes[0].id, center);
     return positions;
   }
-  const radii = new Map(
-    nodes.map((node) => [node.id, 6 + node.importance * 6]),
-  );
-  nodes.forEach((node, index) => {
-    const seed = [...node.id].reduce(
-      (sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0,
-      0,
-    );
-    const angle = (Math.PI * 2 * index) / count + (seed % 100) / 1000;
-    const distance = Math.min(150, 60 + Math.sqrt(count) * 18) + (seed % 30);
-    positions.set(node.id, {
-      x: center.x + Math.cos(angle) * distance,
-      y: center.y + Math.sin(angle) * distance,
+  // 环形分区布局：相同 type 的节点聚集在同一扇形扇区，整体排成一个圆环。
+  const groups = new Map<string, WikiNode[]>();
+  for (const node of nodes) {
+    const list = groups.get(node.type) ?? [];
+    list.push(node);
+    groups.set(node.type, list);
+  }
+  const typeOrder = [...groups.keys()];
+  const sector = (Math.PI * 2) / typeOrder.length;
+  const perRing = 10;
+  typeOrder.forEach((type, g) => {
+    const group = groups.get(type)!;
+    const start = g * sector;
+    group.forEach((node, j) => {
+      const ring = Math.floor(j / perRing);
+      const slot = j % perRing;
+      const radius = 125 + ring * 70;
+      const span = sector * 0.86;
+      const angle =
+        start + sector * 0.07 + (slot / Math.max(1, perRing - 1)) * span;
+      positions.set(node.id, {
+        x: center.x + Math.cos(angle) * radius,
+        y: center.y + Math.sin(angle) * radius,
+      });
     });
   });
-  const idealDistance = Math.max(
-    40,
-    Math.min(110, Math.sqrt((980 * 690) / count) * 0.5),
-  );
-  let temperature = Math.min(40, 12 + Math.sqrt(count) * 6);
-  for (let iteration = 0; iteration < 200; iteration += 1) {
-    const displacement = new Map(
-      nodes.map((node) => [node.id, { x: 0, y: 0 }]),
-    );
-    for (let a = 0; a < count; a += 1)
-      for (let b = a + 1; b < count; b += 1) {
-        const first = nodes[a],
-          second = nodes[b];
-        const fp = positions.get(first.id)!,
-          sp = positions.get(second.id)!;
-        let dx = fp.x - sp.x,
-          dy = fp.y - sp.y,
-          distance = Math.hypot(dx, dy);
-        if (distance < 0.01) {
-          dx = 1;
-          dy = 0;
-          distance = 1;
-        }
-        const minGap = radii.get(first.id)! + radii.get(second.id)! + 8;
-        const force =
-          (idealDistance * idealDistance) / Math.max(distance - minGap, 1);
-        const fd = displacement.get(first.id)!,
-          sd = displacement.get(second.id)!;
-        fd.x += (dx / distance) * force;
-        fd.y += (dy / distance) * force;
-        sd.x -= (dx / distance) * force;
-        sd.y -= (dy / distance) * force;
-      }
-    edges.forEach((edge) => {
-      const source = positions.get(edge.sourceNodeId),
-        target = positions.get(edge.targetNodeId);
-      const sd = displacement.get(edge.sourceNodeId),
-        td = displacement.get(edge.targetNodeId);
-      if (!source || !target || !sd || !td) return;
-      const dx = target.x - source.x,
-        dy = target.y - source.y,
-        distance = Math.max(Math.hypot(dx, dy), 1);
-      const desired =
-        idealDistance +
-        radii.get(edge.sourceNodeId)! +
-        radii.get(edge.targetNodeId)!;
-      const force = Math.max(0, distance - desired) * 0.2;
-      sd.x += (dx / distance) * force;
-      sd.y += (dy / distance) * force;
-      td.x -= (dx / distance) * force;
-      td.y -= (dy / distance) * force;
-    });
-    nodes.forEach((node) => {
-      const position = positions.get(node.id)!,
-        delta = displacement.get(node.id)!;
-      delta.x += (center.x - position.x) * 0.012;
-      delta.y += (center.y - position.y) * 0.012;
-      const magnitude = Math.max(Math.hypot(delta.x, delta.y), 1);
-      const move = Math.min(magnitude, temperature);
-      position.x += (delta.x / magnitude) * move;
-      position.y += (delta.y / magnitude) * move;
-    });
-    temperature *= 0.96;
-  }
-  for (let pass = 0; pass < 10; pass += 1) {
-    let moved = false;
-    for (let a = 0; a < count; a += 1)
-      for (let b = a + 1; b < count; b += 1) {
-        const fp = positions.get(nodes[a].id)!,
-          sp = positions.get(nodes[b].id)!;
-        const dx = sp.x - fp.x,
-          dy = sp.y - fp.y;
-        const dist = Math.max(Math.hypot(dx, dy), 0.01);
-        const minGap = radii.get(nodes[a].id)! + radii.get(nodes[b].id)! + 6;
-        if (dist < minGap) {
-          const overlap = (minGap - dist) / 2;
-          const ux = dx / dist,
-            uy = dy / dist;
-          fp.x -= ux * overlap;
-          fp.y -= uy * overlap;
-          sp.x += ux * overlap;
-          sp.y += uy * overlap;
-          moved = true;
-        }
-      }
-    if (!moved) break;
-  }
   return positions;
 }
+
 function SearchView({ snapshot }: { snapshot: ProjectSnapshot }) {
   const { t } = useI18n();
   const [query, setQuery] = useState(""),
