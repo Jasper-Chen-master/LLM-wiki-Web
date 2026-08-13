@@ -1194,7 +1194,10 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
             </div>
             <svg
               viewBox={`0 0 ${layout.width} ${layout.height}`}
-              onPointerDown={(e) => setDrag({ x: e.clientX, y: e.clientY })}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                setDrag({ x: e.clientX, y: e.clientY });
+              }}
               onPointerMove={(e) => {
                 if (drag) {
                   setPan((value) => ({
