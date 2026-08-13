@@ -731,7 +731,9 @@ function Overview({
   }, [project.profile, snapshot.documents]);
   useEffect(() => {
     if (selectedTemplate === "custom") return;
-    setProfile({ ...PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES][lang] });
+    const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
+    if (!template) return;
+    setProfile({ ...template[lang] });
   }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
@@ -961,7 +963,7 @@ function Overview({
             </button>
             <button
               className="button primary"
-              disabled={saving || !profile.researchGoal.trim()}
+              disabled={saving || !(profile.researchGoal ?? "").trim()}
               onClick={confirm}
             >
               {saving
