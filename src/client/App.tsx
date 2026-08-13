@@ -725,10 +725,12 @@ function Overview({
     [templateHint, setTemplateHint] = useState("");
   useEffect(() => {
     setProfile(project.profile ?? emptyProfile);
+  }, [project.id]);
+  useEffect(() => {
     setSelected((previous) =>
       previous.filter((id) => snapshot.documents.some((d) => d.id === id)),
     );
-  }, [project.profile, snapshot.documents]);
+  }, [snapshot.documents]);
   useEffect(() => {
     if (selectedTemplate === "custom") return;
     const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
