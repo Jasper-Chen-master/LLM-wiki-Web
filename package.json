@@ -10,11 +10,12 @@
     "build": "tsc -b && vite build",
     "start": "node --env-file=.env dist-server/server/index.js",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run"
+    "test": "vitest run src"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "katex": "^0.18.4",
     "multer": "^2.0.2",
     "pdfjs-dist": "^6.2.108",
     "react": "^19.1.1",

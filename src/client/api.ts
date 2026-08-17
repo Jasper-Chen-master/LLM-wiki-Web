@@ -1,4 +1,4 @@
-import type { DocumentRecord, ProcessingJob, Project, ProjectSnapshot, SearchResult, WikiProfile } from "../shared/contracts";
+import type { ChatMessage, ChatThread, DocumentRecord, ProcessingJob, Project, ProjectSnapshot, SearchResult, WikiProfile } from "../shared/contracts";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -23,6 +23,10 @@ export const api = {
   deleteDocuments: (id: string, ids: string[]) => request<{ deleted: number }>(`/api/projects/${id}/documents`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) }),
   understandProfile: (id: string) => request<{ profile: WikiProfile; warnings: string[] }>(`/api/projects/${id}/profile/understand`, { method: "POST" }),
   confirm: (id: string) => request<ProcessingJob>(`/api/projects/${id}/confirm`, { method: "POST" }),
+  chatThreads: (id: string) => request<ChatThread[]>(`/api/projects/${id}/chat/threads`),
+  createChatThread: (id: string, title?: string) => request<ChatThread>(`/api/projects/${id}/chat/threads`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }),
+  chatMessages: (id: string, threadId: string) => request<ChatMessage[]>(`/api/projects/${id}/chat/threads/${threadId}/messages`),
+  sendChatMessage: (id: string, threadId: string, message: string) => request<{ user: ChatMessage; assistant: ChatMessage }>(`/api/projects/${id}/chat/threads/${threadId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) }),
   search: (id: string, q: string) => request<SearchResult>(`/api/projects/${id}/search?q=${encodeURIComponent(q)}`),
   exportUrl: (id: string, format: "json" | "csv") => `/api/projects/${id}/export/${format}`
 };

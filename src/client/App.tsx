@@ -2,6 +2,7 @@ import {
   createContext,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   useCallback,
   useContext,
   useEffect,
@@ -15,10 +16,18 @@ import {
   NavLink,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
+import katex from "katex";
+import "katex/contrib/mhchem/mhchem.js";
+import "katex/dist/katex.min.css";
 import type {
+  ChatClaim,
+  ChatCitation,
+  ChatMessage,
+  ChatThread,
   Project,
   ProjectSnapshot,
   WikiNode,
@@ -33,218 +42,302 @@ const overviewDrafts = new Map<
 >();
 const copy = {
   en: {
-    delete: "Delete selected",
+    delete: "Remove selected",
     selected: "selected",
-    reprocess: "Process current documents",
-    deleteHelp: "Select one or more uploaded documents, then remove them.",
+    reprocess: "Rebuild this Wiki",
+    deleteHelp: "Select sources to remove them from this research space.",
     brand: "Evidence Atlas",
-    eyebrow: "GOAL-CONDITIONED RESEARCH WORKSPACE",
-    hero: "Turn papers into a traceable knowledge space.",
-    lede: "Build an evidence-backed research wiki shaped by the questions that matter to you—not a generic document summary.",
-    start: "Start a research project",
-    example: "e.g. Battery cathode degradation",
-    create: "Create project",
-    projects: "Your projects",
+    eyebrow: "EVIDENCE-FIRST AI RESEARCH",
+    hero: "Build a research Wiki you can trace back to evidence.",
+    lede: "Define what you need to know. Evidence Atlas turns your sources into structured concepts, relationships, explanations, and page-level citations.",
+    start: "Create a knowledge project",
+    example: "Example: Why battery cathodes degrade",
+    create: "Create workspace",
+    projects: "Research spaces",
     total: "total",
-    loading: "Loading workspace…",
+    loading: "Loading research spaces…",
     empty:
-      "No projects yet. Create one above to begin a focused research workspace.",
-    active: "Knowledge graph active",
-    review: "Profile ready for review",
-    setup: "Set up research profile",
+      "No research spaces yet. Create one to turn your sources into an evidence-linked Wiki.",
+    active: "Wiki ready for exploration and questions",
+    review: "Research blueprint awaiting confirmation",
+    setup: "Research blueprint not defined",
     created: "Created",
     opening: "Opening project…",
-    overview: "Overview",
+    overview: "Build",
     graph: "Knowledge graph",
-    search: "Search",
-    workspace: "Research workspace",
+    search: "Wiki search",
+    chat: "Wiki assistant",
+    chatSub: "AI interprets your question, reasons over this Wiki, and cites the supporting source pages.",
+    newChat: "New inquiry",
+    askWiki: "Ask about concepts, mechanisms, comparisons, or implications…",
+    send: "Ask",
+    chatReady: "Answering from the current evidence-linked Wiki.",
+    chatUnavailable: "Build the Wiki before asking evidence-grounded questions.",
+    citations: "Evidence sources",
+    limitations: "Knowledge boundaries",
+    noChats: "Start an inquiry grounded in this project's Wiki.",
+    workspace: "Wiki builder",
     workspaceSub:
-      "Define what matters, then build an evidence-bound knowledge graph.",
-    exportJson: "Export JSON",
-    exportCsv: "Export CSV",
-    guide: "Guide the extraction",
-    confirmed: "Confirmed",
-    ready: "Ready for review",
-    required: "Required",
-    help: "Describe the knowledge this wiki should retain. The profile is validated before processing starts.",
-    objective: "Research objective",
-    objectiveHint: "What question should this wiki help answer?",
+      "Set the knowledge boundary, add evidence sources, then build a Wiki for exploration, search, and analysis.",
+    exportJson: "Export structured Wiki",
+    exportCsv: "Export node table",
+    guide: "Define the Wiki's knowledge boundary",
+    confirmed: "Blueprint active",
+    ready: "Awaiting confirmation",
+    required: "Blueprint required",
+    help: "Tell the system what matters to your research. Only relevant, evidence-backed knowledge should enter the main Wiki.",
+    objective: "Guiding research question",
+    objectiveHint: "What should this Wiki help you understand, compare, or predict?",
     domain: "Research domain",
-    entityTypes: "Important entity types",
-    entitiesHint: "material, process, metric",
-    relations: "Preferred relations",
-    relationsHint: "improves, causes, measured by",
-    ignore: "Information to ignore",
-    ignoreHint: "background, unrelated synthesis",
-    preferences: "Additional preferences",
+    entityTypes: "Knowledge types to retain",
+    entitiesHint: "material, mechanism, method, metric",
+    relations: "Relationships to prioritize",
+    relationsHint: "causes, improves, measured by, derived from",
+    ignore: "Knowledge to leave out",
+    ignoreHint: "generic background, unrelated methods",
+    preferences: "Evidence and extraction notes",
     preferencesHint:
-      "Numerical data, units, and evidence are preserved by default.",
+      "Add definitions, comparison rules, required fields, or other research-specific constraints.",
     numeric: "Extract numerical data",
     units: "Preserve units",
-    evidence: "Require evidence",
-    save: "Save profile",
-    confirm: "Confirm & build graph",
-    rerun: "Run processing again",
-    working: "Working…",
-    upload: "Upload documents",
-    profile: "Research Profile",
-    profileDetail: "DOCX · your goals and priorities",
-    sources: "Source papers",
-    sourceDetail: "PDF or DOCX · up to 20 MB each",
-    choose: "Choose file",
-    chooseMany: "Choose files",
-    noFiles: "No files uploaded yet.",
-    source: "Source document",
-    processing: "Pipeline status",
+    evidence: "Require source evidence",
+    save: "Save blueprint",
+    confirm: "Confirm and build Wiki",
+    rerun: "Rebuild from current sources",
+    working: "Building…",
+    upload: "Add research materials",
+    profile: "Research blueprint",
+    profileDetail: "DOCX · research goals and knowledge priorities",
+    sources: "Evidence sources",
+    sourceDetail: "PDF or DOCX · source material for this Wiki",
+    choose: "Add file",
+    chooseMany: "Add files",
+    noFiles: "No evidence sources added yet.",
+    source: "Evidence source",
+    processing: "Wiki build",
     processingHelp:
-      "Confirm the research profile to start parsing, relevance filtering, extraction, entity resolution, and graph construction.",
-    graphSub: "Explore only knowledge retained by your research profile.",
-    searchKnowledge: "Search knowledge",
-    find: "Find a node…",
+      "Confirm the blueprint to parse sources, filter for relevance, extract knowledge, merge aliases, and bind every result to evidence.",
+    graphSub: "Explore how evidence-backed concepts, methods, findings, and relationships connect.",
+    searchKnowledge: "Search this Wiki",
+    find: "Focus a Wiki node…",
     allTypes: "All types",
     nodes: "nodes",
     relationsCount: "relations",
     graphEmpty:
-      "The graph will appear here once profile confirmation and processing complete. Evidence stays attached to every extracted node and relation.",
-    clickNode: "Click a node to inspect its evidence",
-    properties: "Properties",
-    noProperties: "No structured properties.",
-    related: "Related nodes",
-    selectNode: "Select a node.",
+      "Your knowledge graph will appear after the research blueprint is confirmed and the evidence sources are processed.",
+    clickNode: "Select a node to inspect its meaning, relationships, and evidence",
+    properties: "Structured knowledge",
+    noProperties: "No structured details available.",
+    related: "Connected knowledge",
+    selectNode: "Select a node to open its Wiki detail.",
     searchSub:
-      "Search canonical names, aliases, summaries, and structured graph knowledge.",
-    searchHint: "Search entities, properties, or concepts…",
-    matching: "matching nodes",
-    noSummary: "No summary available.",
+      "Retrieve concepts, aliases, summaries, properties, and relationships from the current structured Wiki.",
+    searchHint: "Search a concept, method, finding, formula, or property…",
+    matching: "Wiki results",
+    noSummary: "This node has no readable summary yet.",
     alsoKnown: "Also known as",
     confidence: "confidence",
     noResults:
-      "No matching structured knowledge. Try a broader term or process more source documents.",
-    importance: "Importance",
+      "This Wiki does not contain matching knowledge yet. Try a broader concept or add more evidence sources.",
+    importance: "Research relevance",
     language: "Switch language",
-    profileRole: "Research profile",
+    profileRole: "Research blueprint",
     evidenceLabel: "Evidence",
+    evidenceFirst: "Evidence-linked research",
+    localWorkspace: "Private local workspace",
+    wikiVersion: "Wiki revision",
+    page: "page",
+    observed: "Observed",
+    reported: "Source reported",
+    inferred: "Wiki synthesis",
+    chatCreateError: "Could not start a new inquiry.",
+    chatSendError: "Could not complete this Wiki inquiry.",
+    jobQueued: "Queued",
+    jobParsing: "Reading sources",
+    jobAnalyzing: "Analyzing goal and corpus",
+    jobPlanning: "Planning Wiki categories",
+    jobFiltering: "Applying research focus",
+    jobExtracting: "Building structured knowledge",
+    jobResolving: "Merging duplicate concepts",
+    jobBuildingGraph: "Linking the knowledge graph",
+    jobCompleted: "Wiki ready",
+    jobFailed: "Build interrupted",
+    jobQueuedMessage: "The evidence sources are waiting to enter the Wiki build.",
+    jobParsingMessage: "Reading document structure, pages, headings, and content blocks.",
+    jobAnalyzingMessage: "Comparing the research objective with themes and knowledge found across the current sources.",
+    jobPlanningMessage: "Creating a controlled classification plan before extracting Wiki entries.",
+    jobFilteringMessage: "Keeping the material that supports your guiding research question.",
+    jobExtractingMessage: "Turning relevant evidence into concepts, properties, findings, and relationships.",
+    jobResolvingMessage: "Combining aliases and duplicate concepts into stable Wiki entries.",
+    jobBuildingGraphMessage: "Connecting Wiki entries to relationships and page-level evidence.",
+    jobCompletedMessage: "The evidence-linked Wiki is ready to explore, search, and question.",
+    jobFailedMessage: "The build stopped before the Wiki was complete. Review the errors below.",
+    documentUploaded: "Awaiting processing",
+    documentParsed: "Knowledge extracted",
+    documentFailed: "Processing failed",
   },
   zh: {
-    delete: "删除所选文件",
+    delete: "移除所选内容",
     selected: "已选择",
-    reprocess: "处理当前文档",
-    deleteHelp: "勾选一个或多个已上传文件后即可删除。",
+    reprocess: "重新构建当前 Wiki",
+    deleteHelp: "勾选不再需要的材料，将其移出当前研究空间。",
     brand: "证据图谱",
-    eyebrow: "目标驱动的研究知识空间",
-    hero: "让论文沉淀为可追溯的知识空间。",
-    lede: "围绕你真正关心的问题，构建以证据为依据的研究 Wiki，而不是泛泛的文档摘要。",
-    start: "创建研究项目",
-    example: "例如：电池正极材料衰减",
-    create: "创建项目",
-    projects: "我的项目",
+    eyebrow: "证据优先的 AI 研究工作台",
+    hero: "把研究材料构建成可追溯的知识 Wiki。",
+    lede: "先定义你真正想理解的问题，再由 AI 从材料中提取概念、关系与结论，并将每条知识连接回原始证据。",
+    start: "新建知识项目",
+    example: "例如：电池正极材料为什么会衰减",
+    create: "创建研究空间",
+    projects: "研究空间",
     total: "个项目",
-    loading: "正在加载工作空间…",
-    empty: "还没有项目。请在上方创建一个项目，开启目标导向的研究工作流。",
-    active: "知识图谱已就绪",
-    review: "偏好等待审阅",
-    setup: "设置研究偏好",
+    loading: "正在载入研究空间…",
+    empty: "还没有研究空间。创建一个项目，把手中的材料整理成有证据支撑的 Wiki。",
+    active: "Wiki 已就绪，可探索、检索与问答",
+    review: "研究蓝图等待确认",
+    setup: "尚未定义研究蓝图",
     created: "创建于",
     opening: "正在打开项目…",
-    overview: "概览",
+    overview: "构建",
     graph: "知识图谱",
-    search: "搜索",
-    workspace: "研究工作空间",
-    workspaceSub: "先定义真正重要的信息，再构建有证据支撑的知识图谱。",
-    exportJson: "导出 JSON",
-    exportCsv: "导出 CSV",
-    guide: "设定提取重点",
-    confirmed: "已确认",
-    ready: "待审阅",
-    required: "需要设置",
-    help: "描述此 Wiki 应保留的知识。系统会在开始处理前校验研究偏好。",
-    objective: "研究目标",
-    objectiveHint: "希望这个 Wiki 帮助回答什么问题？",
+    search: "知识检索",
+    chat: "Wiki 助手",
+    chatSub: "AI 先理解你的问题，再结合当前 Wiki 分析，并标注支撑回答的文件与页码。",
+    newChat: "新建研究问题",
+    askWiki: "询问概念、机制、差异、联系或实际含义…",
+    send: "提问",
+    chatReady: "当前回答仅依据这一版有证据支撑的 Wiki。",
+    chatUnavailable: "请先完成 Wiki 构建，再开始基于证据的问答。",
+    citations: "证据出处",
+    limitations: "知识边界",
+    noChats: "提出一个问题，让 AI 基于当前 Wiki 进行分析。",
+    workspace: "Wiki 构建台",
+    workspaceSub: "定义知识边界，添加证据来源，再构建可探索、可检索、可问答的研究 Wiki。",
+    exportJson: "导出结构化 Wiki",
+    exportCsv: "导出节点表格",
+    guide: "定义 Wiki 的知识边界",
+    confirmed: "蓝图已生效",
+    ready: "等待确认",
+    required: "需要研究蓝图",
+    help: "告诉系统哪些知识对你的研究真正重要。主 Wiki 只保留相关且能够追溯到来源的信息。",
+    objective: "核心研究问题",
+    objectiveHint: "希望这个 Wiki 帮助你理解、比较或预测什么？",
     domain: "研究领域",
-    entityTypes: "重要实体类型",
-    entitiesHint: "材料、工艺、指标",
-    relations: "重点关系",
-    relationsHint: "提升、导致、通过…测量",
-    ignore: "需要忽略的信息",
-    ignoreHint: "背景介绍、无关的合成过程",
-    preferences: "其他偏好",
-    preferencesHint: "默认保留数值、单位与证据来源。",
+    entityTypes: "需要保留的知识类型",
+    entitiesHint: "材料、机制、方法、指标",
+    relations: "需要重点连接的关系",
+    relationsHint: "导致、提升、通过…测量、由…推导",
+    ignore: "不进入主 Wiki 的内容",
+    ignoreHint: "通用背景、无关方法、重复描述",
+    preferences: "证据与提取说明",
+    preferencesHint: "可补充定义要求、对比维度、必需字段或其他研究约束。",
     numeric: "提取数值数据",
     units: "保留单位",
-    evidence: "必须保留证据",
-    save: "保存偏好",
-    confirm: "确认并构建图谱",
-    rerun: "再次运行处理",
-    working: "处理中…",
-    upload: "上传文档",
-    profile: "研究偏好",
-    profileDetail: "DOCX · 说明研究目标与关注重点",
-    sources: "源文档",
-    sourceDetail: "PDF 或 DOCX · 单个文件不超过 20 MB",
-    choose: "选择文件",
-    chooseMany: "选择文件",
-    noFiles: "尚未上传文件。",
-    source: "源文档",
-    processing: "处理进度",
+    evidence: "必须绑定来源证据",
+    save: "保存研究蓝图",
+    confirm: "确认并构建 Wiki",
+    rerun: "按当前材料重新构建",
+    working: "正在构建…",
+    upload: "添加研究材料",
+    profile: "研究蓝图",
+    profileDetail: "DOCX · 描述研究目标与知识优先级",
+    sources: "证据来源",
+    sourceDetail: "PDF 或 DOCX · 用于构建当前 Wiki 的原始材料",
+    choose: "添加文件",
+    chooseMany: "添加文件",
+    noFiles: "尚未添加证据来源。",
+    source: "证据来源",
+    processing: "Wiki 构建",
     processingHelp:
-      "确认研究偏好后，系统将依次执行解析、相关性筛选、信息抽取、实体归并与图谱构建。",
-    graphSub: "探索经研究偏好筛选后保留的知识。",
-    searchKnowledge: "搜索知识",
-    find: "查找节点…",
+      "确认研究蓝图后，系统将读取材料、筛选相关内容、提取结构化知识、合并重复概念，并为节点和关系绑定证据。",
+    graphSub: "探索概念、方法、结论与证据之间的结构化联系。",
+    searchKnowledge: "检索当前 Wiki",
+    find: "定位 Wiki 节点…",
     allTypes: "全部类型",
     nodes: "个节点",
     relationsCount: "条关系",
     graphEmpty:
-      "确认研究偏好并完成处理后，知识图谱将显示在这里。每个节点和关系都会保留证据来源。",
-    clickNode: "点击节点查看证据",
-    properties: "属性",
-    noProperties: "暂无结构化属性。",
-    related: "相关节点",
-    selectNode: "请选择一个节点。",
-    searchSub: "检索规范名称、别名、摘要与结构化图谱知识。",
-    searchHint: "搜索实体、属性或概念…",
-    matching: "个匹配节点",
-    noSummary: "暂无摘要。",
+      "确认研究蓝图并处理证据来源后，知识图谱将在这里生成。",
+    clickNode: "选择节点，查看定义、关系与证据出处",
+    properties: "结构化知识",
+    noProperties: "暂无可展示的结构化信息。",
+    related: "关联知识",
+    selectNode: "选择一个节点，打开它的 Wiki 详情。",
+    searchSub: "从当前结构化 Wiki 中检索概念、别名、摘要、属性与关系。",
+    searchHint: "搜索概念、方法、结论、公式或属性…",
+    matching: "条 Wiki 结果",
+    noSummary: "该节点尚未生成可读摘要。",
     alsoKnown: "别名",
     confidence: "置信度",
     noResults:
-      "未找到匹配的结构化知识。请尝试更宽泛的关键词，或处理更多源文档。",
-    importance: "重要度",
+      "当前 Wiki 尚未收录相关知识。请尝试更宽泛的概念，或添加更多证据来源。",
+    importance: "研究相关度",
     language: "切换语言",
-    profileRole: "研究偏好",
+    profileRole: "研究蓝图",
     evidenceLabel: "证据",
+    evidenceFirst: "证据可追溯的研究",
+    localWorkspace: "本地私有工作空间",
+    wikiVersion: "Wiki 版本",
+    page: "第",
+    observed: "直接观察",
+    reported: "来源陈述",
+    inferred: "Wiki 综合分析",
+    chatCreateError: "无法新建研究问题。",
+    chatSendError: "无法完成本次 Wiki 分析。",
+    jobQueued: "等待构建",
+    jobParsing: "正在读取材料",
+    jobAnalyzing: "正在联合分析目标与材料",
+    jobPlanning: "正在规划 Wiki 分类",
+    jobFiltering: "正在按研究目标筛选",
+    jobExtracting: "正在提取结构化知识",
+    jobResolving: "正在合并重复概念",
+    jobBuildingGraph: "正在连接知识图谱",
+    jobCompleted: "Wiki 已就绪",
+    jobFailed: "构建中断",
+    jobQueuedMessage: "证据来源已进入队列，正在等待开始构建。",
+    jobParsingMessage: "正在识别文档结构、页码、标题与内容区块。",
+    jobAnalyzingMessage: "正在结合核心研究问题，分析当前材料中的主题、范围与必要知识。",
+    jobPlanningMessage: "正在生成受控分类计划，明确每类知识的边界与归类规则。",
+    jobFilteringMessage: "正在保留能够支撑核心研究问题的材料。",
+    jobExtractingMessage: "正在把相关证据整理为概念、属性、结论与关系。",
+    jobResolvingMessage: "正在合并别名与重复概念，形成稳定的 Wiki 条目。",
+    jobBuildingGraphMessage: "正在连接 Wiki 条目、知识关系与页级证据。",
+    jobCompletedMessage: "证据可追溯的 Wiki 已经可以探索、检索与问答。",
+    jobFailedMessage: "Wiki 尚未构建完成，请查看下方错误信息。",
+    documentUploaded: "等待处理",
+    documentParsed: "知识已提取",
+    documentFailed: "处理失败",
   },
 } as const;
 const templateCopy = {
   en: {
-    templates: "Templates",
-    research: "Research",
-    reading: "Reading",
-    personalGrowth: "Personal Growth",
-    general: "General",
-    business: "Business",
-    custom: "Custom",
-    outputLanguage: "Output language",
+    templates: "Blueprint presets",
+    research: "Academic evidence",
+    reading: "Argument mapping",
+    personalGrowth: "Actionable insights",
+    general: "General knowledge",
+    business: "Business evidence",
+    custom: "Custom blueprint",
+    outputLanguage: "Wiki language",
     templateHint:
-      "Pick a template to pre-fill the profile, or choose Custom to upload your own profile document.",
+      "Start from a research blueprint, or define a custom knowledge boundary.",
      templateNoSources:
-       "Template applied. Upload source documents before building the knowledge graph.",
+        "Blueprint applied. Add evidence sources before building the Wiki.",
     templateApplied:
-      'Template applied. Click "Confirm & build graph" to start processing.',
+      'Blueprint applied. Choose "Confirm and build Wiki" when the knowledge boundary is ready.',
   },
   zh: {
-    templates: "模板",
-    research: "学术研究",
-    reading: "阅读笔记",
-    personalGrowth: "个人成长",
-    general: "通用",
-    business: "商业分析",
-    custom: "自定义",
-    outputLanguage: "输出语言",
+    templates: "研究蓝图预设",
+    research: "学术证据",
+    reading: "论证梳理",
+    personalGrowth: "行动洞察",
+    general: "通用知识",
+    business: "商业证据",
+    custom: "自定义蓝图",
+    outputLanguage: "Wiki 语言",
     templateHint:
-      "选择一个模板自动填充提取偏好，或选择「自定义」上传你自己的研究偏好文件。",
-    templateNoSources: "模板已填充。请先上传源文档，再构建知识图谱。",
-    templateApplied: "模板已填充。点击“确认并构建图谱”开始处理。",
+      "从预设研究蓝图开始，或选择「自定义蓝图」定义自己的知识边界。",
+    templateNoSources: "研究蓝图已应用。请添加证据来源，再开始构建 Wiki。",
+    templateApplied: "研究蓝图已应用。确认知识边界后即可构建 Wiki。",
   },
 } as const;
 type Copy = { [K in keyof typeof copy.en]: string } & {
@@ -650,6 +743,7 @@ function ProjectList() {
 }
 function Workspace() {
   const { projectId = "" } = useParams();
+  const location = useLocation();
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<ProjectSnapshot>();
   const [error, setError] = useState("");
@@ -667,9 +761,9 @@ function Workspace() {
   useEffect(() => {
     if (!snapshot?.job || ["completed", "failed"].includes(snapshot.job.status))
       return;
-    const timer = window.setInterval(() => void load(), 1800);
+    const timer = window.setInterval(() => void load(), 1_000);
     return () => window.clearInterval(timer);
-  }, [snapshot?.job, load]);
+  }, [snapshot?.job?.status, load]);
   if (error)
     return (
       <main className="page">
@@ -693,14 +787,15 @@ function Workspace() {
             {t.graph} <b>{snapshot.nodes.length}</b>
           </NavLink>
           <NavLink to={`/projects/${projectId}/search`}>{t.search}</NavLink>
+          <NavLink to={`/projects/${projectId}/chat`}>{t.chat}</NavLink>
         </nav>
         <div className="sidebar-foot">
-          {t.evidenceLabel}-first research
+          {t.evidenceFirst}
           <br />
-          Local MVP · v0.1
+          {t.localWorkspace} · v0.1
         </div>
       </aside>
-      <main className="workspace-main">
+      <main className={`workspace-main ${location.pathname.endsWith("/chat") ? "chat-workspace-main" : location.pathname.endsWith("/search") ? "search-workspace-main" : ""}`}>
         <Routes>
           <Route
             index
@@ -708,6 +803,7 @@ function Workspace() {
           />
           <Route path="graph" element={<GraphView snapshot={snapshot} />} />
           <Route path="search" element={<SearchView snapshot={snapshot} />} />
+          <Route path="chat" element={<ChatView snapshot={snapshot} />} />
         </Routes>
       </main>
     </div>
@@ -755,7 +851,7 @@ function Overview({
     prevLang.current = lang;
     const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
     if (!template) return;
-    setProfile({ ...template[lang] });
+    setProfile({ ...template[lang], outputLanguage: lang });
   }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
@@ -764,7 +860,7 @@ function Overview({
   const applyTemplate = async (templateId: keyof typeof PRESET_TEMPLATES) => {
     const template = PRESET_TEMPLATES[templateId][lang];
     setSelectedTemplate(templateId);
-    setProfile({ ...template });
+    setProfile({ ...template, outputLanguage: lang });
     setTemplateHint(
       snapshot.documents.some((document) => document.role === "source")
         ? t.templateApplied
@@ -774,7 +870,7 @@ function Overview({
   const selectCustom = () => {
     setSelectedTemplate("custom");
     setTemplateHint(t.templateHint);
-    setProfile({ ...emptyProfile });
+    setProfile({ ...emptyProfile, outputLanguage: lang });
   };
   const upload = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -796,7 +892,9 @@ function Overview({
   const save = async () => {
     setSaving(true);
     try {
-      await api.updateProfile(project.id, profile);
+      const savedProfile = { ...profile, outputLanguage: profile.outputLanguage ?? lang };
+      setProfile(savedProfile);
+      await api.updateProfile(project.id, savedProfile);
       await reload();
     } catch (e) {
       setError((e as Error).message);
@@ -807,7 +905,9 @@ function Overview({
   const confirm = async () => {
     setSaving(true);
     try {
-      await api.updateProfile(project.id, profile);
+      const savedProfile = { ...profile, outputLanguage: profile.outputLanguage ?? lang };
+      setProfile(savedProfile);
+      await api.updateProfile(project.id, savedProfile);
       await api.confirm(project.id);
       await reload();
     } catch (e) {
@@ -1032,7 +1132,7 @@ function Overview({
                       <strong>{d.fileName}</strong>
                       <small>
                         {d.role === "profile" ? t.profileRole : t.source} ·{" "}
-                        {d.status}
+                        {d.status === "parsed" ? t.documentParsed : d.status === "failed" ? t.documentFailed : t.documentUploaded}
                       </small>
                     </div>
                   </label>
@@ -1064,15 +1164,16 @@ function highlightEvidence(text: string, term: string): string {
   return escaped.replace(new RegExp(`(${pattern})`, "gi"), "<mark>$1</mark>");
 }
 function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [selected, setSelected] = useState<WikiNode | undefined>(
     snapshot.nodes[0],
   );
   const [query, setQuery] = useState(""),
     [type, setType] = useState("all");
   const [zoom, setZoom] = useState(1),
-    [pan, setPan] = useState({ x: 0, y: 0 }),
-    [drag, setDrag] = useState<{ x: number; y: number }>();
+    [pan, setPan] = useState({ x: 0, y: 0 });
+  const viewRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } });
+  const dragRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const types = useMemo(
     () =>
       [...new Set(snapshot.nodes.map((node) => node.type.trim()))].sort(),
@@ -1121,18 +1222,42 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
     : [];
   const transform = `translate(${pan.x} ${pan.y}) scale(${zoom})`;
   const canvasRef = useRef<HTMLDivElement>(null);
+  const updateView = useCallback((nextZoom: number, nextPan: { x: number; y: number }) => {
+    viewRef.current = { zoom: nextZoom, pan: nextPan };
+    setZoom(nextZoom);
+    setPan(nextPan);
+  }, []);
+  useEffect(() => {
+    // A filtered layout has a new viewBox. Resetting its transform lets SVG's centered
+    // viewBox alignment place the reduced set in the middle instead of retaining old pan.
+    updateView(1, { x: 0, y: 0 });
+    setSelected(current => current && nodes.some(node => node.id === current.id) ? current : nodes[0]);
+  }, [nodes, updateView]);
   useEffect(() => {
     const element = canvasRef.current;
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      setZoom((value) =>
-        Math.max(0.1, Math.min(20, value * (event.deltaY < 0 ? 1.12 : 0.89))),
-      );
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const pointer = {
+        x: (event.clientX - rect.left) * (layout.width / rect.width),
+        y: (event.clientY - rect.top) * (layout.height / rect.height),
+      };
+      const current = viewRef.current;
+      const nextZoom = Math.max(0.1, Math.min(20, current.zoom * (event.deltaY < 0 ? 1.12 : 0.89)));
+      const worldPoint = {
+        x: (pointer.x - current.pan.x) / current.zoom,
+        y: (pointer.y - current.pan.y) / current.zoom,
+      };
+      updateView(nextZoom, {
+        x: pointer.x - worldPoint.x * nextZoom,
+        y: pointer.y - worldPoint.y * nextZoom,
+      });
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [layout.height, layout.width]);
   return (
     <>
       <PageHeader
@@ -1160,15 +1285,6 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
             <option key={value}>{value}</option>
           ))}
         </select>
-        <button
-          className="button"
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-          }}
-        >
-          Fit
-        </button>
         <span>
           {nodes.length} {t.nodes} · {edges.length} {t.relationsCount}
         </span>
@@ -1178,9 +1294,6 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
       ) : (
         <div className="graph-layout">
           <section className="graph-canvas" ref={canvasRef}>
-            <div className="graph-hint">
-              滚轮缩放 · 拖拽平移 · 点击节点查看证据
-            </div>
             <div className="graph-legend">
               {types.map((legendType) => (
                 <div className="legend-item" key={legendType}>
@@ -1196,21 +1309,26 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
               viewBox={`0 0 ${layout.width} ${layout.height}`}
               onPointerDown={(e) => {
                 e.preventDefault();
-                setDrag({ x: e.clientX, y: e.clientY });
+                dragRef.current = { x: e.clientX, y: e.clientY };
+                e.currentTarget.setPointerCapture(e.pointerId);
               }}
               onPointerMove={(e) => {
+                const drag = dragRef.current;
                 if (drag) {
-                  const displayScale =
-                    (canvasRef.current?.clientWidth ?? layout.width) / layout.width;
-                  setPan((value) => ({
-                    x: value.x + (e.clientX - drag.x) / displayScale,
-                    y: value.y + (e.clientY - drag.y) / displayScale,
-                  }));
-                  setDrag({ x: e.clientX, y: e.clientY });
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const current = viewRef.current;
+                  updateView(current.zoom, {
+                    x: current.pan.x + (e.clientX - drag.x) * (layout.width / rect.width),
+                    y: current.pan.y + (e.clientY - drag.y) * (layout.height / rect.height),
+                  });
+                  dragRef.current = { x: e.clientX, y: e.clientY };
                 }
               }}
-              onPointerUp={() => setDrag(undefined)}
-              onPointerLeave={() => setDrag(undefined)}
+              onPointerUp={(e) => {
+                dragRef.current = undefined;
+                e.currentTarget.releasePointerCapture(e.pointerId);
+              }}
+              onPointerCancel={() => { dragRef.current = undefined; }}
             >
               <g transform={transform}>
                 {edges.map((edge) => {
@@ -1243,7 +1361,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                       key={node.id}
                       className="graph-node"
                       transform={`translate(${p.x} ${p.y})`}
-                      onClick={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation();
                         setSelected(node);
                       }}
@@ -1285,7 +1403,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                     {Object.entries(selected.properties).map(([key, value]) => (
                       <div key={key}>
                         <dt>{key}</dt>
-                        <dd>{String(value)}</dd>
+                        <dd>{renderStructuredValue(String(value))}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1314,10 +1432,10 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                     <article className="evidence" key={item.id}>
                       <header>
                         <span className="evidence-src">
-                          {docNames.get(item.documentId) ?? "source"}
+                          {docNames.get(item.documentId) ?? t.source}
                         </span>
-                        <span className="evidence-page">p. {item.page}</span>
-                        <span className="evidence-status">{item.status}</span>
+                        <span className="evidence-page">{lang === "zh" ? `第 ${item.page} 页` : `${t.page} ${item.page}`}</span>
+                        <span className="evidence-status">{item.status === "observed" ? t.observed : item.status === "inferred" ? t.inferred : t.reported}</span>
                       </header>
                       <p
                         dangerouslySetInnerHTML={{
@@ -1436,9 +1554,18 @@ function SearchView({ snapshot }: { snapshot: ProjectSnapshot }) {
   const { t } = useI18n();
   const [query, setQuery] = useState(""),
     [results, setResults] = useState<WikiNode[]>(snapshot.nodes);
-  const search = async (value: string) => {
-    setQuery(value);
-    setResults((await api.search(snapshot.project.id, value)).nodes);
+  const search = async () => {
+    const normalizedQuery = query.replace(/\s+/g, " ").trim();
+    setResults((await api.search(snapshot.project.id, normalizedQuery)).nodes);
+  };
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    void search();
+  };
+  const onSearchKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void search();
   };
   return (
     <>
@@ -1455,13 +1582,18 @@ function SearchView({ snapshot }: { snapshot: ProjectSnapshot }) {
         }
       />
       <section className="search-panel">
-        <input
-          autoFocus
-          className="search-input"
-          value={query}
-          onChange={(e) => void search(e.target.value)}
-          placeholder={t.searchHint}
-        />
+        <form className="search-form" onSubmit={submitSearch}>
+          <textarea
+            autoFocus
+            rows={1}
+            className="search-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder={t.searchHint}
+          />
+          <button className="button primary" type="submit">{t.search}</button>
+        </form>
         <p className="muted">
           {results.length} {t.matching}
         </p>
@@ -1485,6 +1617,176 @@ function SearchView({ snapshot }: { snapshot: ProjectSnapshot }) {
             </article>
           ))}
           {!results.length && <div className="empty-state">{t.noResults}</div>}
+        </div>
+      </section>
+    </>
+  );
+}
+function renderBareChemistry(content: string, keyPrefix: number) {
+  return content.split(/(\n)/).map((line, lineIndex) => {
+    if (line === "\n") return line;
+    const colonMatch = line.match(/^(.*?[：:]\s*)(.+)$/u);
+    const prefix = colonMatch?.[1] ?? "";
+    let candidate = (colonMatch?.[2] ?? line).trim();
+    const suffixMatch = candidate.match(/([。；;，,]+)$/u);
+    const suffix = suffixMatch?.[1] ?? "";
+    if (suffix) candidate = candidate.slice(0, -suffix.length).trimEnd();
+    const hasReactionArrow = /(?:→|⇌|->|<=>)/u.test(candidate);
+    const elementCount = candidate.match(/[A-Z][a-z]?/g)?.length ?? 0;
+    if (!hasReactionArrow || elementCount < 2 || /[\p{Script=Han}]/u.test(candidate)) return line;
+    const mhchem = candidate
+      .replace(/⇌/gu, "<=>")
+      .replace(/→/gu, "->")
+      .replace(/\b([a-z])(?=[A-Z])/gu, "$1 ");
+    const tex = `\\ce{${mhchem}}`;
+    return <span key={`chem-${keyPrefix}-${lineIndex}`}>{prefix}<span className="chat-math" dangerouslySetInnerHTML={{ __html: katex.renderToString(tex, { throwOnError: false, trust: false }) }} />{suffix}</span>;
+  });
+}
+function renderChatText(content: string) {
+  return content.split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g).map((part, index) => {
+    const display = part.startsWith("$$") && part.endsWith("$$");
+    const inline = !display && part.startsWith("$") && part.endsWith("$");
+    if (!display && !inline) return renderBareChemistry(part, index);
+    const tex = part.slice(display ? 2 : 1, display ? -2 : -1).trim();
+    return <span key={`${index}-${tex}`} className={display ? "chat-math display" : "chat-math"} dangerouslySetInnerHTML={{ __html: katex.renderToString(tex, { displayMode: display, throwOnError: false, trust: false }) }} />;
+  });
+}
+
+function toWikiLatex(formula: string) {
+  const greek: Record<string, string> = {
+    α: "\\alpha", β: "\\beta", γ: "\\gamma", Δ: "\\Delta", θ: "\\theta",
+    λ: "\\lambda", μ: "\\mu", π: "\\pi", ρ: "\\rho", τ: "\\tau", φ: "\\phi", ω: "\\omega",
+  };
+  return formula
+    .replace(/[αβγΔθλμπρτφω]/gu, (symbol) => greek[symbol])
+    .replace(/_([A-Za-z0-9]+(?:,[A-Za-z0-9]+)?)/g, "_{$1}")
+    .replace(/\*/g, "\\cdot ")
+    .replace(/≈/g, "\\approx ")
+    .replace(/≤/g, "\\le ")
+    .replace(/≥/g, "\\ge ")
+    .replace(/≠/g, "\\ne ")
+    .replace(/∝/g, "\\propto ")
+    .replace(/√/g, "\\sqrt ");
+}
+
+function renderStructuredValue(content: string) {
+  const mathSignal = content.search(/[=<>≈≤≥≠∝∑∫√αβγΔθλμπρτφω]/u);
+  if (mathSignal < 0) return content;
+  const prefixEnd = Math.max(
+    content.lastIndexOf("，", mathSignal),
+    content.lastIndexOf("：", mathSignal),
+    content.lastIndexOf("；", mathSignal),
+  );
+  const prefix = prefixEnd >= 0 ? content.slice(0, prefixEnd + 1) : "";
+  const candidate = content.slice(prefixEnd + 1).trim();
+  if (!candidate || /[\p{Script=Han}]/u.test(candidate)) return content;
+  const html = katex.renderToString(toWikiLatex(candidate), {
+    throwOnError: false,
+    trust: false,
+    strict: "ignore",
+  });
+  return <>{prefix}<span className="structured-math" dangerouslySetInnerHTML={{ __html: html }} /></>;
+}
+function ChatClaimStatuses({ claims }: { claims: ChatClaim[] }) {
+  const { t } = useI18n();
+  const counts = claims.reduce<Record<string, number>>((current, claim) => ({ ...current, [claim.status]: (current[claim.status] ?? 0) + 1 }), {});
+  return <div className="chat-claims">{Object.entries(counts).map(([status, count]) => <span key={status} className={`claim-status ${status}`}>{status === "observed" ? t.observed : status === "inferred" ? t.inferred : t.reported} × {count}</span>)}</div>;
+}
+function chatCitationLabel(citation: ChatCitation, language: Language, pageLabel: string, snapshot: ProjectSnapshot) {
+  const documentName = citation.documentName.replace(/\.(pdf|docx)$/i, "");
+  const location = language === "zh" ? `第 ${citation.page} 页` : `${pageLabel} ${citation.page}`;
+  const citedNode = citation.nodeId ? snapshot.nodes.find(node => node.id === citation.nodeId) : undefined;
+  const evidenceNode = snapshot.nodes.find(node => node.evidenceIds.includes(citation.evidenceId));
+  const topic = citation.topic ?? citedNode?.displayName ?? evidenceNode?.displayName ?? citation.section;
+  return [documentName, location, topic].filter(Boolean).join(" · ");
+}
+function ChatView({ snapshot }: { snapshot: ProjectSnapshot }) {
+  const { t, lang } = useI18n();
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const ready = snapshot.job?.status === "completed" && snapshot.nodes.length > 0;
+  const loadThreads = useCallback(async () => {
+    const next = await api.chatThreads(snapshot.project.id);
+    setThreads(next);
+    setActiveThreadId((current) => current && next.some((thread) => thread.id === current) ? current : (next[0]?.id ?? ""));
+  }, [snapshot.project.id]);
+  useEffect(() => { void loadThreads().catch((reason: Error) => setError(reason.message)); }, [loadThreads]);
+  useEffect(() => {
+    if (!activeThreadId) { setMessages([]); return; }
+    void api.chatMessages(snapshot.project.id, activeThreadId).then(setMessages).catch((reason: Error) => setError(reason.message));
+  }, [activeThreadId, snapshot.project.id]);
+  useEffect(() => {
+    const messageList = messagesRef.current;
+    if (messageList) messageList.scrollTop = messageList.scrollHeight;
+  }, [messages]);
+  const createThread = async () => {
+    try {
+      setError("");
+      const thread = await api.createChatThread(snapshot.project.id);
+      setThreads((current) => [thread, ...current]);
+      setActiveThreadId(thread.id);
+      setMessages([]);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t.chatCreateError); }
+  };
+  const send = async () => {
+    const question = draft.trim();
+    if (!question || sending || !ready) return;
+    try {
+      setSending(true); setError("");
+      let threadId = activeThreadId;
+      let createdThread = false;
+      if (!threadId) {
+        const thread = await api.createChatThread(snapshot.project.id);
+        threadId = thread.id;
+        createdThread = true;
+      }
+      const reply = await api.sendChatMessage(snapshot.project.id, threadId, question);
+      if (createdThread) {
+        setActiveThreadId(threadId);
+        setMessages([reply.user, reply.assistant]);
+      } else setMessages((current) => [...current, reply.user, reply.assistant]);
+      setDraft("");
+      await loadThreads();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t.chatSendError); }
+    finally { setSending(false); }
+  };
+  const submitChat = (event: FormEvent) => {
+    event.preventDefault();
+    void send();
+  };
+  const onChatKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void send();
+  };
+  return (
+    <>
+      <PageHeader title={t.chat} subtitle={t.chatSub} actions={<button className="button" disabled={!ready} onClick={() => void createThread()}>{t.newChat}</button>} />
+      {!ready ? <Alert message={t.chatUnavailable} /> : null}
+      {error ? <Alert message={error} /> : null}
+      <section className="chat-layout">
+        <aside className="chat-threads">
+          {threads.length ? threads.map((thread) => <button key={thread.id} className={thread.id === activeThreadId ? "active" : ""} onClick={() => setActiveThreadId(thread.id)}><strong>{thread.title}</strong><small>{t.wikiVersion} {thread.wikiRevision}</small></button>) : <p className="muted">{t.noChats}</p>}
+        </aside>
+        <div className="chat-panel">
+          <p className="chat-revision">{t.chatReady} · {t.wikiVersion} {snapshot.project.wikiRevision ?? 0}</p>
+          <div className="chat-messages" ref={messagesRef} aria-live="polite">
+            {messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
+              <div className="chat-message-content">{renderChatText(message.content)}</div>
+              {message.answer?.claims.length ? <ChatClaimStatuses claims={message.answer.claims} /> : null}
+              {message.answer?.citations.length ? <div className="chat-citations"><strong>{t.citations}</strong>{message.answer.citations.map((citation) => <span key={citation.evidenceId}>{chatCitationLabel(citation, lang, t.page, snapshot)}</span>)}</div> : null}
+              {message.answer?.limitations.length ? <div className="chat-limitations"><strong>{t.limitations}</strong>{message.answer.limitations.map((item) => <span key={item}>{item}</span>)}</div> : null}
+            </article>)}
+          </div>
+          <form className="chat-compose" onSubmit={submitChat}>
+            <textarea value={draft} disabled={!ready || sending} onChange={(event) => setDraft(event.target.value)} onKeyDown={onChatKeyDown} placeholder={t.askWiki} />
+            <button className="button primary" disabled={!ready || sending || !draft.trim()}>{sending ? "…" : t.send}</button>
+          </form>
         </div>
       </section>
     </>
@@ -1591,6 +1893,18 @@ function Metric({ label, value }: { label: string; value: string }) {
 function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
   const { t } = useI18n();
   const job = snapshot.job;
+  const presentation = job ? {
+    queued: { label: t.jobQueued, message: t.jobQueuedMessage },
+    parsing: { label: t.jobParsing, message: t.jobParsingMessage },
+    analyzing: { label: t.jobAnalyzing, message: t.jobAnalyzingMessage },
+    planning: { label: t.jobPlanning, message: t.jobPlanningMessage },
+    filtering: { label: t.jobFiltering, message: t.jobFilteringMessage },
+    extracting: { label: t.jobExtracting, message: t.jobExtractingMessage },
+    resolving: { label: t.jobResolving, message: t.jobResolvingMessage },
+    building_graph: { label: t.jobBuildingGraph, message: t.jobBuildingGraphMessage },
+    completed: { label: t.jobCompleted, message: t.jobCompletedMessage },
+    failed: { label: t.jobFailed, message: t.jobFailedMessage },
+  }[job.status] : undefined;
   return (
     <section className="panel job-panel">
       <p className="eyebrow">03 · {t.processing}</p>
@@ -1599,7 +1913,7 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
         <>
           <div className="job-head">
             <Status
-              label={job.status.replace("_", " ")}
+              label={presentation?.label ?? job.status}
               tone={job.status === "completed" ? "good" : "pending"}
             />
             <strong>{job.progress}%</strong>
@@ -1607,7 +1921,7 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
           <div className="progress">
             <i style={{ width: `${job.progress}%` }} />
           </div>
-          <p>{job.message}</p>
+          <p>{presentation?.message ?? job.message}</p>
           {job.errors.map((error) => (
             <Alert key={error} message={error} />
           ))}

@@ -1,0 +1,35 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "✦Evidence Atlas" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=e6]: PHY150
+    - navigation [ref=e7]:
+      - link "Overview" [ref=e8] [cursor=pointer]:
+        - /url: /projects/91404569-7258-4e58-a04c-14c0fc051586
+      - link "Knowledge graph 0" [ref=e9] [cursor=pointer]:
+        - /url: /projects/91404569-7258-4e58-a04c-14c0fc051586/graph
+        - text: Knowledge graph
+        - generic [ref=e10]: "0"
+      - link "Search" [ref=e11] [cursor=pointer]:
+        - /url: /projects/91404569-7258-4e58-a04c-14c0fc051586/search
+      - link "Wiki chat" [ref=e12] [cursor=pointer]:
+        - /url: /projects/91404569-7258-4e58-a04c-14c0fc051586/chat
+    - generic [ref=e13]: Evidence-first researchLocal MVP · v0.1
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Knowledge graph" [level=1] [ref=e17]
+        - paragraph [ref=e18]: Explore only knowledge retained by your research profile.
+      - generic [ref=e19]:
+        - link "Search knowledge" [ref=e20] [cursor=pointer]:
+          - /url: /projects/91404569-7258-4e58-a04c-14c0fc051586/search
+        - button "Switch language" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: EN
+          - generic [ref=e25]: 中
+    - generic [ref=e26]:
+      - textbox "Find a node…" [ref=e27]
+      - combobox [ref=e28]:
+        - option "All types" [selected]
+      - button "Fit" [ref=e29] [cursor=pointer]
+      - generic [ref=e30]: 0 nodes · 0 relations
+    - generic [ref=e31]: The graph will appear here once profile confirmation and processing complete. Evidence stays attached to every extracted node and relation.

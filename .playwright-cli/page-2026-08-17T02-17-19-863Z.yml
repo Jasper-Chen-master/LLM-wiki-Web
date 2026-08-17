@@ -1,0 +1,180 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "✦Evidence Atlas" [ref=e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=e6]: 锂电池正极材料
+    - navigation [ref=e7]:
+      - link "Overview" [ref=e8] [cursor=pointer]:
+        - /url: /projects/d14632af-6f49-46b6-8bd2-17454b462572
+      - link "Knowledge graph 23" [ref=e9] [cursor=pointer]:
+        - /url: /projects/d14632af-6f49-46b6-8bd2-17454b462572/graph
+        - text: Knowledge graph
+        - generic [ref=e10]: "23"
+      - link "Search" [ref=e11] [cursor=pointer]:
+        - /url: /projects/d14632af-6f49-46b6-8bd2-17454b462572/search
+      - link "Wiki chat" [ref=e12] [cursor=pointer]:
+        - /url: /projects/d14632af-6f49-46b6-8bd2-17454b462572/chat
+    - generic [ref=e13]: Evidence-first researchLocal MVP · v0.1
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Knowledge graph" [level=1] [ref=e17]
+        - paragraph [ref=e18]: Explore only knowledge retained by your research profile.
+      - generic [ref=e19]:
+        - link "Search knowledge" [ref=e20] [cursor=pointer]:
+          - /url: /projects/d14632af-6f49-46b6-8bd2-17454b462572/search
+        - button "Switch language" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: EN
+          - generic [ref=e25]: 中
+    - generic [ref=e26]:
+      - textbox "Find a node…" [ref=e27]
+      - combobox [ref=e28]:
+        - option "All types" [selected]
+        - option "事件"
+        - option "实体"
+        - option "属性"
+        - option "数据点"
+        - option "概念"
+      - button "Fit" [ref=e29] [cursor=pointer]
+      - generic [ref=e30]: 23 nodes · 57 relations
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - generic [ref=e33]: 滚轮缩放 · 拖拽平移 · 点击节点查看证据
+        - generic:
+          - generic: 事件
+          - generic: 实体
+          - generic: 属性
+          - generic: 数据点
+          - generic: 概念
+        - img [ref=e34]:
+          - generic [ref=e35]:
+            - generic [ref=e79] [cursor=pointer]: LiFePO4/C
+            - generic [ref=e81] [cursor=pointer]: FePO4·2H2O precursor
+            - generic [ref=e83] [cursor=pointer]: Electroflocculation
+            - generic [ref=e85] [cursor=pointer]: Li3V2(PO4)3 (LVP)
+            - generic [ref=e87] [cursor=pointer]: Lithium-ion battery (LIB
+            - generic [ref=e89] [cursor=pointer]: Carbon coating
+            - generic [ref=e91] [cursor=pointer]: Electrochemical performa
+            - generic [ref=e93] [cursor=pointer]: LFP@LVP-CES
+            - generic [ref=e95] [cursor=pointer]: Coaxial Hybrid Electrosp
+            - generic [ref=e97] [cursor=pointer]: LFP (LiFePO4)
+            - generic [ref=e99] [cursor=pointer]: LVP (Li3V2(PO4)3)
+            - generic [ref=e101] [cursor=pointer]: Carbon Nanofiber (CNF) N
+            - generic [ref=e103] [cursor=pointer]: Low-Temperature Pyrolysi
+            - generic [ref=e105] [cursor=pointer]: XRD Analysis
+            - generic [ref=e107] [cursor=pointer]: FePO4·2H2O
+            - generic [ref=e109] [cursor=pointer]: Anodic oxidation
+            - generic [ref=e111] [cursor=pointer]: CTAB (cetyltrimethylammo
+            - generic [ref=e113] [cursor=pointer]: Nickel-iron alloy (Fe0.6
+            - generic [ref=e115] [cursor=pointer]: Uniform experimental des
+            - generic [ref=e117] [cursor=pointer]: Temperature effect on Fe
+            - generic [ref=e119] [cursor=pointer]: Fe/P ratio
+            - generic [ref=e121] [cursor=pointer]: CTAB
+            - generic [ref=e123] [cursor=pointer]: Iron-to-phosphorus ratio
+      - complementary [ref=e125]:
+        - paragraph [ref=e126]: 概念
+        - heading "LiFePO4/C" [level=2] [ref=e127]
+        - paragraph [ref=e128]: A composite cathode material for lithium-ion batteries, consisting of lithium iron phosphate coated with carbon to enhance conductivity.
+        - generic [ref=e129]:
+          - generic [ref=e130]: confidence
+          - strong [ref=e131]: 100%
+        - generic [ref=e132]:
+          - generic [ref=e133]: Importance
+          - strong [ref=e134]: 100%
+        - heading "Properties" [level=3] [ref=e135]
+        - generic [ref=e136]:
+          - generic [ref=e137]:
+            - term [ref=e138]: first discharge capacity at 0.2C
+            - definition [ref=e139]: 162.8 mAh·g−1
+          - generic [ref=e140]:
+            - term [ref=e141]: capacity retention after 300 cycles at 1C
+            - definition [ref=e142]: 85.5%
+          - generic [ref=e143]:
+            - term [ref=e144]: vibronic density
+            - definition [ref=e145]: 1.211 g·cm−3 (LFP-I), 1.240 g·cm−3 (LFP-II)
+          - generic [ref=e146]:
+            - term [ref=e147]: preparation
+            - definition [ref=e148]: Mixed with lithium acetate (Fe/Li 1:1.05) and 10 wt.% ascorbic acid, sintered at 650°C for 8h in argon
+          - generic [ref=e149]:
+            - term [ref=e150]: application
+            - definition [ref=e151]: Lithium-ion battery cathode
+          - generic [ref=e152]:
+            - term [ref=e153]: specific_capacity
+            - definition [ref=e154]: 157 mA h g−1 (for LFP-3CTAB)
+          - generic [ref=e155]:
+            - term [ref=e156]: capacity_retention
+            - definition [ref=e157]: 99.36% after 100 cycles
+          - generic [ref=e158]:
+            - term [ref=e159]: particle_size
+            - definition [ref=e160]: Average 280 nm
+        - heading "Related nodes" [level=3] [ref=e161]
+        - generic [ref=e162]:
+          - button "FePO4·2H2O precursor" [ref=e163] [cursor=pointer]
+          - button "Electroflocculation" [ref=e164] [cursor=pointer]
+          - button "Li3V2(PO4)3 (LVP)" [ref=e165] [cursor=pointer]
+          - button "Lithium-ion battery (LIB)" [ref=e166] [cursor=pointer]
+          - button "Carbon coating" [ref=e167] [cursor=pointer]
+          - button "Electrochemical performance" [ref=e168] [cursor=pointer]
+          - button "FePO4·2H2O" [ref=e169] [cursor=pointer]
+          - button "Iron-to-phosphorus ratio" [ref=e170] [cursor=pointer]
+        - heading "Evidence" [level=3] [ref=e171]
+        - article [ref=e172]:
+          - generic [ref=e173]:
+            - generic [ref=e174]: 02_ACS_Omega_3D_mesoporous_FePO4_LiFePO4_C.pdf
+            - generic [ref=e175]: p. 1
+            - generic [ref=e176]: reported
+          - paragraph [ref=e177]:
+            - text: http://pubs.acs.org/journal/acsodf Article Novel Synthesis of 3D Mesoporous FePO4 from Electroflocculation of Iron Filings as a Precursor of High-Performance
+            - mark [ref=e178]: LiFePO4/C
+            - text: "Cathode for Lithium-Ion Batteries Jiawu Peng, Xiaoting Hong,* Qiongxiang Zhou, Kwan San Hui, and Bin Chen Cite This: ACS Omega 2023, 8, 12707−12715 Read Online ACCESS Metrics & More Article Recommendations * sı Supporting Information ABSTRACT: This study presents an economic and environmentally friendly method for the synthesis of microspherical FePO4·2H2O precursors with secondary nanostructures by the electroflocculation of low-cost iron fillers in a hot solution. The morphology and crystalline shape of the precursors were adjusted by gradient co- precipitation of pH conditions. The effect of precursor structure and morphology on the electrochemical performance of the synthesized"
+            - mark [ref=e179]: LiFePO4/C
+            - text: was investigated. Electrochemical analysis showed that the assembly of FePO4·2H2O submicron spherical particles from primary nanoparticles and nanorods resulted in
+            - mark [ref=e180]: LiFePO4/C
+            - text: exhibiting excellent multiplicity and cycling performance with first discharge capacities at 0.2C, 1C, 5C, and 10C of 162.8, 134.7, 85.5, and 47.7 mAh·g−1, respectively, and the capacity of
+            - mark [ref=e181]: LiFePO4/C
+            - text: was maintained at 85.5% after 300 cycles at 1C. The significant improvement in the electrochemical performance of
+            - mark [ref=e182]: LiFePO4/C
+            - text: was attributed to the enhanced Li+ diffusion rate and the crystallinity of
+            - mark [ref=e183]: LiFePO4/C
+            - text: . Thus, this work shows a new three-dimensional mesoporous FePO4 synthesized from the iron flake electroflocculation as a precursor for high-performance
+            - mark [ref=e184]: LiFePO4/C
+            - text: "cathodes for lithium-ion batteries. 1. INTRODUCTION prepare nanostructure LFP particles to facilitate Li+ diffusion, In recent years, with the ever-growing demand for portable including hydrothermal/solvothermal,15,16 sol−gel,17 and hard- electronic and environmentally friendly devices due to the templating approaches.18−20 Surface conductive coating and ion doping are complementally used to enhance the migration energy crisis and environmental pollution, the development of of electrons.21−23 However, the high-performance nano- efficient and robust electrochemical energy storage or structured LFP suffers from low tap density and volumetric conversion systems is imminent.1 There is widespread popular energy density limitations.24 With these drawbacks, extensive support for using lithium-ion batteries (LIBs), which provide studies have been initiated to explore novel LFP nanostruc- electricity without giving rise to any carbon dioxide emissions.2 tures. By combining the advantages of nanoscaled building Among many potential cathode materials, the LiFePO4 bricks and microscaled assemblies.25 The novel hybrid with (LFP) cathode has attracted great attention since its discovery self-assembled nano/microstructures is highly pursued to in 1997.3 The LiFePO4 battery chemistry offers numerous improve the self-assembling nanoscale building blocks and is clear advantages such as environmentally friendly, non- becoming an intensive and popular research topic.26,27 combustibility, high thermal stability, good cycle stability, Many research efforts have been focused on the develop- and a flat discharge potential at 3.4 V vs Li/Li+. However, ment of various LFP synthetic techniques and products with LFP’s low electric conductivity (∼10−11 cm2 S−1) and low Li- multifarious self-assembled morphologies and carbon-coated ion diffusion kinetics (0−1.8 × 10−4 cm2 S−1) at room LFP cathode materials. In this regard, Goodenough et al. first temperature, which becomes even weaker at lower temper- reported the three-dimensional (3D) LFP architectures by a atures, limit its application in fields that require high rate modified solvothermal approach combined with high-temper- capability.4,5 To overcome these problems, many specific ature calcination.28 These flower-like LiFePO4 microspheres modifications based on the structure−performance relation- ship have been tried to improve the rate performance of LFP, such as specifical controls of particle size,6,7 shape, and Received: December 8, 2022 morphology.8−10 Accepted: March 9, 2023 Lithium-ion diffusion in LFP is preferably one-dimensional Published: March 29, 2023 along the b-axis.11,12 It is evident that the nanostructure facilitates shorter ion diffusion paths, resulting in high efficiency.13,14 Various methods have been developed to © 2023 The Authors. Published by American Chemical Society https://doi.org/10.1021/acsomega.2c07838 12707 ACS Omega 2023, 8, 12707−12715"
+          - text: 5837b97c-a53d-40d7-8c5d-048d9c522c99
+        - article [ref=e185]:
+          - generic [ref=e186]:
+            - generic [ref=e187]: 02_ACS_Omega_3D_mesoporous_FePO4_LiFePO4_C.pdf
+            - generic [ref=e188]: p. 5
+            - generic [ref=e189]: reported
+          - paragraph [ref=e190]:
+            - text: ACS Omega http://pubs.acs.org/journal/acsodf Article Figure 4. SEM (a, b) and HRTEM images (c−f) of
+            - mark [ref=e191]: LiFePO4/C
+            - text: synthesized by the carbon thermal reduction process. (g−k) Selected area electron diffraction patterns and (l) EDS energy spectrum of LFP/C. The vibronic density of the electrode material is directly by the Fe2+/Fe3+ redox couple during the lithium-ion related to the volumetric energy density of the battery, which extraction and insertion process. The initial charge plateau is can reach approximately 1.211 g·cm−3 for LFP-I and 1.240 g· slightly broader than the discharge one for two samples, which cm−3 for LFP-II. This property allows for a higher volumetric results from slightly overused lithium salt in the carbothermal energy density of the carbon-coated lithium iron phosphate reduction process, and then more lithium ions are extracted cathode material.54,55 from the LFP/C crystal structure during the first charge.56 Figure 5a shows the initial charge/discharge profiles of the LFP/C-I delivers a higher discharge capacity of 162 mAh g−1 LFP/C-I and LFP/C- II composites in the range of 2.3 to 4.2 compared to 144 mAh g−1 for LFP/C-II. Additionally, the V at a 0.2C (0.034 A g−1) rate. Two samples exhibit a typical voltage difference between the charge/discharge plateau of flat voltage plateau between 3.5 and 3.4 V (vs Li+/Li), caused LFP/C-I (45 mV) is smaller than that of the LFP/C-II 12711 https://doi.org/10.1021/acsomega.2c07838 ACS Omega 2023, 8, 12707−12715
+          - text: 6834eaba-6785-440a-90b5-15e9dce33d62
+        - article [ref=e192]:
+          - generic [ref=e193]:
+            - generic [ref=e194]: 04_Materials_FePO4_2H2O_anodic_oxidation.pdf
+            - generic [ref=e195]: p. 4
+            - generic [ref=e196]: reported
+          - paragraph [ref=e197]: "Materials 2025, 18, 2555 4 of 19 The experimental conditions set for this experiment were as follows: electrolyte con- centration: 0.1–2 mol/L; voltage: 8–16 V; pH: 0.8–3.2; and duration of electricity supply: 1–9 h. A homogeneous experimental design table was designed from the described ex- perimental factors and variable levels as shown in Table 2. After the completion of the reactions in each group, a 30% H2 O2 solution was slowly added to the suspension and the suspension was stirred for 1 h. Subsequently, the precipitate was filtered and washed multiple times and then placed in a blast-drying oven for drying at 80 ◦ C for 12 h. Finally, the FePO4 ·2H2 O sample was obtained. The obtained FePO4 ·2H2 O samples were mixed with lithium acetate (Fe/Li molar ratio of 1:1.05) and 10 wt.% ascorbic acid as a carbon source. The mixture was dispersed in 70 mL anhydrous ethanol and stirred at 70 ◦ C for 6 h. After drying, the mixture was sintered at 650 ◦ C for 8 h under an argon atmosphere to obtain LiFePO4 /C samples. The crystallinity of the sample was examined by X-ray diffraction (XRD diffractometer Ultima IV Rigo, Rigaku Corporation, Tokyo, Japan). Test conditions were as follows: target material: Cu target; tube voltage: 35 kV; tube current: 30 mA; and scanning speed: 5◦ /min. The surface of FP material was analyzed using a scanning electron microscope (SEM, S-4800, Hitachi, Tokyo, Japan). The surface morphology of the FP material was analyzed and observed by transmission electron microscopy (TEM FEI Talos F200X, Thermo Fisher Scientific, Waltham, MA, USA), and the content of each element in the FP material was quantitatively analyzed by an inductively coupled plasma optical emission spectrometer (ICP-OES AGILENT 725-ES, Agilent Technologies, Wilmington, DE, USA). The content of the crystalline water in the FP material was determined by a thermogravimetric thermal difference analysis (TG-DSC STA6000, PerkinElmer, Waltham, MA, USA) at a heating rate of 10 ◦ C/min. The test temperature range was 30–800 ◦ C. To further evaluate the performance of the iron phosphate precursor, a LiFePO4 /C cathode material was prepared from the precursor and assembled into 2025-coin cells. First, LiFePO4 /C, acetylene black, and PVDF were mixed in at a mass ratio of 8:1:1 with N-methyl-2-pyrrolidone to form a black slurry, which was then coated on aluminum foil. Subsequently, cathode material pellets (diameter: 12 mm) were prepared. Next, the cathode pellet, lithium metal foil, 1M LiPF6 /EC-EMC-DMC electrolyte (with a volume ratio of 1:1:1), and Polyethylene battery separator were assembled into the battery in an argon-filled glovebox. The first charge/discharge performance and 100-cycle performance were tested using a battery testing system (CT-3008W-5V-10mA, Neware, Shenzhen, China; voltage window: 2.5–4.2 V, and 1C rate: 170 mA h g−1 ). Cyclic voltammetry (CV) tests were performed at a scan rate of 0.5 mV s−1 . Electrochemical impedance spectroscopy (EIS) tests were conducted on both pre-cycling and post-cycling LFP cells. The battery assembly process is as follows: first, the negative shell containing the centrally positioned lithium plate is placed in the glove box. Next, 55 µL of electrolyte is added, followed by placing the separator on top. The lithium plate is subsequently positioned over the separator, and the positive electrode is placed thereafter. A second addition of an electrolyte is performed, after which the gaskets and shrapnel are added sequentially. Finally, the positive shell is placed, and the battery is sealed using an encapsu- lation machine (Crystal Precision Manufacturing, Shanghai, China). The assembled battery remains in the glove box for 24 h before being removed for the testing of its charging and discharging performance. 3. Results and Discussion 3.1. Synthesis Mechanism of FePO4 ·2H2 O Fe and Ni are located in the eighth group of the fourth period in the periodic table. Both elements have two outer electrons in their outermost orbitals, making it easy for"
+          - text: ff37bc7c-ca7f-46d4-bc9c-69bed1e5deaa
+        - article [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]: 04_Materials_FePO4_2H2O_anodic_oxidation.pdf
+            - generic [ref=e201]: p. 15
+            - generic [ref=e202]: reported
+          - paragraph [ref=e203]:
+            - text: demonstrated an enhanced electrochemical performance. According to Figure 11, the XRD pattern of the
+            - mark [ref=e204]: LiFePO4/C
+            - text: "material obtained by fur- Materials 2025, 18, 2555 ther preparation of the FePO4 material obtained from the above experiments was15com- of 19 pared with the standard PDF card (PDF #40-1499) progression, and no obvious stray peaks appeared. The SEM test of the resulting"
+            - mark [ref=e205]: LiFePO4/C
+            - text: material is shown in Figure S9, which shows the that the prepared 4 /C LiFePO prepared LiFePO material4/Cis material consistent consistent is with with the the existing existing studies studies [20–24]. As [20– can 24].seen be As can from seen from beFigure Figure S9, the S9, the lithium ironlithium phosphateiron phosphate material consistsmaterialof consists of lamel- lamellar-stacked lar-stacked particles. Itsparticles. maximum maximum Its lamellar lamellar particle sizeparticle size the is 400 nm, is 400 nm, the lamellar minimum minimum lamellar particle is particle 80 nm, andis 80 nm, the and the average average particle sizeparticle is 280 nm.sizeThis is 280 nm. This makes makes itideal it a relatively a relatively lithiumideal iron lithium iron phosphate phosphate precursor. Theprecursor. The carbon carbon content content in LiFePO 4 /C in
+            - mark [ref=e206]: LiFePO4/C
+            - text: is is exclusively exclusively derived derived from ascorbic frompyrolysis acid ascorbic as acid pyrolysis confirmed confirmed byasthe TGA mass TGA mass the(Figure byloss loss (Figure 7). CTAB’s 7). CTAB’s contribution con- is limited tribution to precursoris limited precursor particletosize reduction (250 size particle nm forreduction FP-3CTAB (250vs. nm1.3forµm FP-3CTAB vs. 1.3 µm for unmodified FP, for unmodified Figure 9), which FP, 9), which Figurecarbon enhances enhances coating carbon uniformity andcoating thereby uniformity improvesand thereby cycling im- stability proves cycling (99.36% capacity stability retention(99.36% vs. 98% capacity retention in controls, vs.12b). Figure 98% in controls, Figure 12b). Materials 2025, 18, x FOR PEER REVIEW 17 of 21 Figure 11. XRD patterns of lithium iron phosphate. Figure 11. XRD patterns of lithium iron phosphate. Figure12. Figure 12.Charge/discharge and cycling Charge/discharge and graphs of cycling graphs oflithium ironphosphate phosphatemodified lithiumiron withdifferent modifiedwith diﬀerent amountsofofCTAB amounts addedtotothe CTABadded theprecursor. precursor.(a) (a)Initial Initialcharge/discharge curve.(b) charge/dischargecurve. Performancecurve (b)Performance curve for 100 cycles. for 100 cycles. According to Figure 12, a comparative analysis was conducted on the initial charge/discharge performance of the lithium iron phosphate (LFP) prepared from distinct precursors [30–32]. The specific capacity of the LFP sample prepared from the FP sample without precursor modification was found to be 139 mA h g−1, the discharge plateau was found to be 3.39V, and the specific capacity of the LFP sample after 100 charge/discharge
+          - text: c5cd0f86-44c1-4b79-9eb3-20fd059d679e
+        - article [ref=e207]:
+          - generic [ref=e208]:
+            - generic [ref=e209]: 04_Materials_FePO4_2H2O_anodic_oxidation.pdf
+            - generic [ref=e210]: p. 16
+            - generic [ref=e211]: reported
+          - paragraph [ref=e212]: Materials 2025, 18, 2555 16 of 19 According to Figure 12, a comparative analysis was conducted on the initial charge/discharge performance of the lithium iron phosphate (LFP) prepared from distinct precursors [30–32]. The specific capacity of the LFP sample prepared from the FP sample without precursor modification was found to be 139 mA h g−1 , the discharge plateau was found to be 3.39 V, and the specific capacity of the LFP sample after 100 charge/discharge cycles was 136 mA h g−1 , with a capacity retention rate of 98%. The LFP-0.05CTAB sample prepared with the FP-0.05CTAB precursor exhibited a specific capacity of 143 mA h g−1 and a discharge plateau of 3.4 V at 0.2 C. After 100 charge/discharge cycles, the LFP sample demonstrated a capacity retention rate of 98%. The specific capacity of the LFP sample was 140 mA h g−1 , with a capacity retention rate of 98.2%, which is an increase in the specific capacity of the sample compared to that of the LFP. The discharge point platform of the LFP-1.5CTAB prepared with FP-1.5CTAB was slightly decreased compared to LFP, which might be due to the lower amount of Fe2+ involved in the redox reaction, with the lower Fe- to-phosphorus ratio (0.914) of its precursor, which in turn led to the poorer electrochemical performance. The specific capacity of the LFP-3CTAB sample obtained from the FP-3CTAB precursor is 157 mA h g−1 , and the discharge platform is 3.38 V at a 0.2C current. The specific capacity is 156 mA h g−1 after 100 charge/discharge cycles, with a capacity reten- tion rate of 99.36%, which represents a significant improvement in the performance of LFP when compared with that of LFP, a known unmodified FP precursor. This enhancement can be attributed to the average particle size of FP-3CTAB, which is 250 nm. The lithium-ion diffusion channel of the LFP prepared from this precursor is shorter than that of the unmod- ified LFP, thereby improving its electrochemical performance. The specific capacity of the LFP prepared with FP-5CTAB as a precursor was 125 mA h g−1 at 0.2C, and the discharge platform was 3.23 V. After 100 charge/discharge cycles, the specific capacity of the LFP was 116 mA h g−1 , and the capacity retention rate was 92.95%. A comparison with the unmodified LFP revealed that all performance metrics were reduced. This phenomenon can be attributed to the iron-to-phosphorus ratio in the FP-5 sample, which is only 0.8145. This results in a lower amount of Fe2+ participating in the redox reaction in the fabricated LFP, which in turn results in the poorer charge/discharge performance of the prepared LFP cathode material. Electrochemical impedance spectroscopy (EIS) tests were performed on both pre- cycling and post-cycling LFP cells, with the results shown in Figure S12a. As shown in Figure S12a, an intercept at the Z’ axis at a high frequency corresponds to the ohmic resistance (Rs ), representing the resistance of the electrolyte (see the equivalent circuit model in Figure S13). The semicircle in the middle frequency range indicates the charge- transfer resistance (Rct ). The inclined line in the low frequency region represents the Warburg impedance (W1), which relates to the solid-state diffusion of lithium ion inside the active particles. A constant phase element (CPE) was placed to represent the double layer capacitance and passivation film capacitance. The diffusion rate of Li+ in electrolyte solution is far greater than that of Li+ in solid-state active material, so the resistance of the charge transfer can be considered as the rate-determining step of the diffusion process of Li+ during the charge/discharge of a battery. Additionally, the cyclic voltammetry (CV) test results for the LFP cells are presented in Figure S12b. Post-cycling, a notable reduction in charge transfer resistance was observed in the LFP cell, indicating improved charge transfer kinetics and suggesting an enhanced lithium-ion diffusion coefficient. The CV test confirmed that the LFP cell fabricated using the experimentally prepared LFP material exhibited behavior consistent with the existing literature [8,20–23]. The solid-phase diffusion coefficient of Li+ is considered of significant interest due to its importance in improving the power density of lithium-ion batteries [33]. The determination of diffusion characteristics is dependent on the solution of the Warburg impedance response,
+          - text: 88dec934-0ab1-41ad-85d2-a2079e8c856c

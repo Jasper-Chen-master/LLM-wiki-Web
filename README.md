@@ -13,7 +13,7 @@ Open `http://localhost:5173`. The API runs on `http://localhost:3001`. Copy `.en
 
 ## Workflow
 
-Create a project → upload DOCX Research Profile and PDF/DOCX source files → review/edit the generated profile → confirm → follow job progress → explore graph, wiki detail, search, and JSON/CSV export.
+Create a project → upload DOCX Research Profile and PDF/DOCX source files → review/edit the generated profile → confirm → analyze the goal against the corpus → plan controlled Wiki categories → filter and extract evidence-backed knowledge → explore graph, Wiki detail, search, chat, and JSON/CSV export.
 
 ## Limitations
 
