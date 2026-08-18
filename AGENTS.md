@@ -18,7 +18,7 @@
 ↓
 Knowledge Graph / LLM Wiki
 ↓
-搜索 / 浏览 / 分析 / 导出
+搜索 / 浏览 / AI 问答 / 分析 / 导出
 
 在实现新功能或修改现有功能时，始终保持这一产品方向。
 
@@ -359,6 +359,23 @@ Summary 和 Evidence 必须分离。
 
 ---
 
+### Wiki Chat Analyzer / Answerer
+
+Wiki 助手是建立在当前 Project 的 Structured Knowledge Layer 之上的 AI 问答能力。
+
+它至少应拆分为：
+
+* Question Analyzer：理解问题，并从受限的 Wiki 节点目录中选择相关 node IDs；
+* Context Builder：根据已验证的 node IDs 读取项目内的 nodes、edges、properties 与 evidence references；
+* Answerer：生成结构化、带 claims 与 evidence IDs 的回答；
+* Citation Binder：在服务端验证并解析 evidence IDs，绑定文件名、页码、section 与 block ID。
+
+Question Analyzer 和 Answerer 不应合并成一个无法验证的超大 Prompt。
+
+回答中的事实、推断、引用与知识边界必须能够被 Schema 验证。
+
+---
+
 所有长 Prompt 应集中存放，例如：
 
 ```text
@@ -497,6 +514,77 @@ Embedding 功能必须放在独立 abstraction 后面。
 优先利用结构化 graph 数据。
 
 不要每次都重新把大量源文档发送给 LLM。
+
+---
+
+## 10.1 Wiki 助手 / AI 问答架构
+
+项目必须支持基于 AI 的 Wiki 问答，但该功能不是“把原始 PDF 全文直接发送给模型”的文档聊天。
+
+Wiki 助手的职责是：
+
+```text
+用户问题
+↓
+基于当前 Project 的 Wiki 目录分析相关主题
+↓
+选择并验证相关 node IDs
+↓
+从 Structured Knowledge Layer 构建受限上下文
+↓
+AI 生成经过 Schema 验证的结构化回答
+↓
+服务端绑定 Evidence / Document / Page / Section / Block
+↓
+向用户显示回答、证据出处与知识边界
+```
+
+### 问答数据边界
+
+* 每次问答必须限制在当前 `projectId` 内；
+* 不得引用其他 Project 的 node、edge、evidence、document 或 chat 数据；
+* 默认使用当前 Wiki snapshot 中的结构化 nodes、edges、properties、summaries 与 evidence locations；
+* 不得将 `DocumentBlock.text` 或 `Evidence.originalText` 无边界地发送给 Chat Provider；
+* 模型返回的 node IDs 与 evidence IDs 必须在服务端针对本次检索上下文重新验证；
+* 任何无法解析、越界或伪造的引用都必须安全失败；
+* Wiki 证据不足时，应明确说明知识边界，不得编造答案。
+
+### 回答结构
+
+回答至少应支持：
+
+* readable answer；
+* claims；
+* claim status：`observed` / `reported` / `inferred`；
+* related node IDs；
+* evidence IDs；
+* resolved citations；
+* limitations。
+
+Citation 应尽可能显示：
+
+* source document；
+* page；
+* section；
+* block ID；
+* related Wiki topic。
+
+### 对话生命周期
+
+* 一个 Project 可以拥有多个 Chat Thread；
+* Thread 与 Message 必须持久化并严格绑定所属 Project；
+* 对话应记录使用的 Wiki revision，避免把旧回答误认为基于最新 Wiki；
+* 新一轮提问可以读取该 Thread 的有限近期历史，但不得无限扩张上下文；
+* 用户必须能够创建、切换和删除对话；
+* 删除 Thread 时必须级联删除其 Messages；
+* 删除操作必须验证 `projectId + threadId`，不得影响其他 Project 的对话；
+* Wiki 重建后，新问题应读取最新可用 Wiki snapshot；历史回答仍保留其原始 revision 标记。
+
+### Provider 与安全
+
+Wiki 助手必须复用 `LLMProvider` abstraction，不得在前端或 Chat Route 中直接绑定 DeepSeek。
+
+API Key、Prompt Injection 防护、structured output validation、retry / repair 与安全失败规则同样适用于问答功能。
 
 ---
 
@@ -908,7 +996,7 @@ Evidence Binding
 ↓
 Knowledge Graph
 ↓
-Search / Wiki / Export
+Search / Wiki / AI Assistant / Export
 ```
 
 ---
@@ -1090,8 +1178,12 @@ MVP 最终应支持：
 18. 查看来源和页码；
 19. 搜索知识；
 20. 查看 related nodes；
-21. 导出 JSON / CSV；
-22. 清晰显示 processing errors。
+21. 使用 Wiki 助手基于当前结构化知识进行 AI 问答；
+22. 问答结果显示 claims、状态、证据文件、页码与知识边界；
+23. 创建、切换并持久化多个 Project-scoped 对话；
+24. 删除对话并级联删除消息，同时保持跨 Project 数据隔离；
+25. 导出 JSON / CSV；
+26. 清晰显示 processing errors。
 
 在这条完整流程跑通以前：
 
@@ -1158,5 +1250,4 @@ MVP 最终应支持：
 
 真正目标是：
 
-> 根据用户真正关心的信息，将用户提供的文档转化为一个经过筛选、具有证据来源、可以搜索、浏览、分析和导出的结构化知识空间。
-
+> 根据用户真正关心的信息，将用户提供的文档转化为一个经过筛选、具有证据来源、可以搜索、浏览、进行 AI 问答、分析和导出的结构化知识空间。

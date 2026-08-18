@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { DocumentBlock, Evidence, WikiEdge, WikiNode } from "../../shared/contracts.js";
+import type { DocumentBlock, Evidence, WikiClassificationDecision, WikiEdge, WikiGenerationPlan, WikiNode } from "../../shared/contracts.js";
 import type { PersistedState } from "../store.js";
 
 /** A minimal extraction shape so providers can evolve without leaking into graph persistence. */
@@ -16,6 +16,7 @@ export interface ExtractedEntity {
   confidence?: number;
   confidenceReason?: string;
   evidenceIds?: string[];
+  classification?: WikiClassificationDecision;
 }
 
 export interface ExtractedRelation {
@@ -26,6 +27,8 @@ export interface ExtractedRelation {
   confidenceReason?: string;
   evidenceIds?: string[];
   relationStatus?: WikiEdge["relationStatus"];
+  conditions?: Record<string, string | number>;
+  scope?: string;
 }
 
 export interface GraphBuildInput {
@@ -33,6 +36,7 @@ export interface GraphBuildInput {
   entities: ExtractedEntity[];
   relations: ExtractedRelation[];
   evidence: Evidence[];
+  plan?: WikiGenerationPlan;
 }
 
 export interface GraphBuildResult {
@@ -128,6 +132,8 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
     }));
     const bestImportance = scored.reduce((best, item) => item.importance > best.importance ? item : best);
     const bestConfidence = scored.reduce((best, item) => item.confidence > best.confidence ? item : best);
+    const classification = group.map(item => item.classification).filter((item): item is WikiClassificationDecision => Boolean(item))
+      .sort((a, b) => b.confidence - a.confidence)[0];
     return {
       id: idFor(projectId, "node", normalized),
       canonicalName: primary.canonicalName ?? primary.name,
@@ -138,7 +144,7 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
       properties,
       importance: bestImportance.importance, importanceReason: bestImportance.importanceReason,
       confidence: bestConfidence.confidence, confidenceReason: bestConfidence.confidenceReason,
-      evidenceIds,
+      evidenceIds, classification,
     } satisfies WikiNode;
   });
   return { nodes, rejected };
@@ -152,16 +158,36 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
   for (const node of nodes) for (const name of [node.canonicalName, node.displayName, ...node.aliases]) byName.set(normalizeEntityName(name), node);
 
   const edgeMap = new Map<string, WikiEdge>();
+  const normalizedLabel = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase();
+  const categoryByLabel = new Map((input.plan?.categories ?? []).map(category => [normalizedLabel(category.label), category]));
+  const relationRuleByLabel = new Map((input.plan?.relationRules ?? []).map(rule => [normalizedLabel(rule.label), rule]));
+  const allowedRelationLabels = new Set([
+    ...(input.plan?.relationTypes ?? []), ...(input.plan?.relationRules ?? []).map(rule => rule.label),
+  ].map(normalizedLabel));
   for (const relation of input.relations) {
     const source = byName.get(normalizeEntityName(relation.source));
     const target = byName.get(normalizeEntityName(relation.target));
     const { valid, missing } = validEvidenceIds(relation.evidenceIds, evidenceIds);
     const label = `${relation.source} ${relation.relationType} ${relation.target}`;
-    if (!source || !target || source.id === target.id || missing.length || !valid.length) {
+    const relationKey = normalizedLabel(relation.relationType);
+    const rule = relationRuleByLabel.get(relationKey);
+    const sourceCategory = source ? categoryByLabel.get(normalizedLabel(source.type)) : undefined;
+    const targetCategory = target ? categoryByLabel.get(normalizedLabel(target.type)) : undefined;
+    const invalidTypePair = Boolean(rule && (
+      (rule.allowedSourceCategoryIds.length && (!sourceCategory || !rule.allowedSourceCategoryIds.some(id => normalizedLabel(id) === normalizedLabel(sourceCategory.id))))
+      || (rule.allowedTargetCategoryIds.length && (!targetCategory || !rule.allowedTargetCategoryIds.some(id => normalizedLabel(id) === normalizedLabel(targetCategory.id))))
+    ));
+    const invalidInference = relation.relationStatus === "inferred" && rule && !rule.allowInferred;
+    const missingConditions = Boolean(rule?.requiresConditions && !Object.keys(relation.conditions ?? {}).length);
+    const belowThreshold = relation.confidence !== undefined
+      && relation.confidence < (input.plan?.qualityPolicy?.relationThreshold ?? 0);
+    if (!source || !target || source.id === target.id || missing.length || !valid.length
+      || (input.plan && !allowedRelationLabels.has(relationKey)) || invalidTypePair || invalidInference || missingConditions || belowThreshold) {
       rejected.push({ kind: "relation", name: label, missingEvidenceIds: missing.length ? missing : ["unresolved node or evidence required"] });
       continue;
     }
-    const key = `${source.id}|${relation.relationType.trim().toLowerCase()}|${target.id}`;
+    const endpoints = rule?.symmetric ? [source.id, target.id].sort() : [source.id, target.id];
+    const key = `${endpoints[0]}|${relationKey}|${endpoints[1]}`;
     const existing = edgeMap.get(key);
     if (existing) {
       existing.evidenceIds = unique([...existing.evidenceIds, ...valid]);
@@ -176,21 +202,9 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
     const signal = evidenceSignal(valid, input.evidence);
     edgeMap.set(key, {
       id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id,
-      relationType: relation.relationType.trim(), direction: "directed", confidence: relation.confidence === undefined ? signal.confidence : clamp(relation.confidence, signal.confidence), confidenceReason: relation.confidenceReason ?? signal.confidenceReason,
-      evidenceIds: valid, relationStatus: relation.relationStatus ?? "inferred",
+      relationType: rule?.label ?? relation.relationType.trim(), direction: rule?.symmetric ? "symmetric" : "directed", confidence: relation.confidence === undefined ? signal.confidence : clamp(relation.confidence, signal.confidence), confidenceReason: relation.confidenceReason ?? signal.confidenceReason,
+      evidenceIds: valid, relationStatus: relation.relationStatus ?? "reported", conditions: relation.conditions, scope: relation.scope,
     });
-  }
-  // If the model omitted semantic links, connect concepts co-mentioned in the same evidence
-  // block. These edges are explicitly marked inferred and retain the shared source evidence.
-  const byEvidence = new Map<string, WikiNode[]>();
-  for (const node of nodes) for (const evidenceId of node.evidenceIds) byEvidence.set(evidenceId, [...(byEvidence.get(evidenceId) ?? []), node]);
-  for (const [evidenceId, members] of byEvidence) {
-    for (let index = 0; index < Math.min(members.length, 8); index++) for (let other = index + 1; other < Math.min(members.length, 8); other++) {
-      const source = members[index], target = members[other]; const key = `${source.id}|related_to|${target.id}`;
-      if (edgeMap.has(key)) continue;
-      const signal = evidenceSignal([evidenceId], input.evidence);
-      edgeMap.set(key, { id: idFor(input.projectId, "edge", key), sourceNodeId: source.id, targetNodeId: target.id, relationType: "related_to", direction: "directed", confidence: signal.confidence, confidenceReason: `同一证据块共现；${signal.confidenceReason}`, evidenceIds: [evidenceId], relationStatus: "inferred" });
-    }
   }
   return { nodes, edges: [...edgeMap.values()], rejected };
 }
@@ -200,7 +214,7 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
  * blocks first, then accepts either `entities`/`relations` or `nodes`/`edges` extraction shapes.
  * This keeps the persistence boundary evidence-first while provider output contracts mature.
  */
-export function buildGraph(projectId: string, extraction: unknown, blocks: DocumentBlock[]) {
+export function buildGraph(projectId: string, extraction: unknown, blocks: DocumentBlock[], plan?: WikiGenerationPlan) {
   const evidence = blocks.map(block => ({
     id: randomUUID(), documentId: block.documentId, page: block.page, section: block.section,
     blockId: block.id, originalText: block.text, status: "reported" as const,
@@ -217,7 +231,7 @@ export function buildGraph(projectId: string, extraction: unknown, blocks: Docum
   const graph = buildEvidenceBoundGraph({
     projectId, evidence,
     entities: withFallbackEvidence(raw.entities ?? raw.nodes),
-    relations: withFallbackEvidence(raw.relations ?? raw.edges),
+    relations: withFallbackEvidence(raw.relations ?? raw.edges), plan,
   });
   return { ...graph, evidence };
 }
@@ -249,6 +263,21 @@ export function removeDocumentKnowledge(state: PersistedState, projectId: string
   ));
 }
 
+/** Clears one project's derived graph while retaining parsed document blocks for an efficient
+ * profile-driven rebuild. Evidence still referenced by another project is preserved defensively. */
+export function clearProjectGraphKnowledge(state: PersistedState, projectId: string) {
+  const projectNodeIds = new Set(state.nodes.filter(node => node.id.startsWith(`${projectId}:`)).map(node => node.id));
+  const projectEdgeIds = new Set(state.edges.filter(edge => edge.id.startsWith(`${projectId}:`)).map(edge => edge.id));
+  const candidateEvidenceIds = new Set([
+    ...state.nodes.filter(node => projectNodeIds.has(node.id)).flatMap(node => node.evidenceIds),
+    ...state.edges.filter(edge => projectEdgeIds.has(edge.id)).flatMap(edge => edge.evidenceIds),
+  ]);
+  state.nodes = state.nodes.filter(node => !projectNodeIds.has(node.id));
+  state.edges = state.edges.filter(edge => !projectEdgeIds.has(edge.id));
+  const survivingEvidenceIds = new Set([...state.nodes, ...state.edges].flatMap(item => item.evidenceIds));
+  state.evidence = state.evidence.filter(item => !candidateEvidenceIds.has(item.id) || survivingEvidenceIds.has(item.id));
+}
+
 /** Merges an incrementally-built graph while preserving stable node and edge identifiers. */
 export function mergeGraphInto(state: PersistedState, projectId: string, graph: Pick<GraphBuildResult, "nodes" | "edges"> & { evidence: Evidence[] }) {
   state.evidence.push(...graph.evidence);
@@ -268,6 +297,8 @@ export function mergeGraphInto(state: PersistedState, projectId: string, graph: 
       confidenceReason: incomingHasHigherConfidence ? node.confidenceReason : existing.confidenceReason,
       importance: Math.max(existing.importance, node.importance),
       importanceReason: incomingHasHigherImportance ? node.importanceReason : existing.importanceReason,
+      classification: !existing.classification || (node.classification?.confidence ?? 0) > existing.classification.confidence
+        ? node.classification : existing.classification,
     };
   }
   const edgeById = new Map(state.edges.map((edge, index) => [edge.id, index]));

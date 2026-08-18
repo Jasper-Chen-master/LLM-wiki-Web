@@ -5,6 +5,7 @@ import {
   fallbackGenerationPlan,
   normalizeGenerationPlan,
   representativeCorpusSample,
+  resolveEntityClassification,
 } from "./wiki-planning-service.js";
 
 const plan = (language: "en" | "zh" = "zh"): WikiGenerationPlan => normalizeGenerationPlan({
@@ -27,6 +28,7 @@ const plan = (language: "en" | "zh" = "zh"): WikiGenerationPlan => normalizeGene
     },
   ],
   relationTypes: [], classificationRules: [], analyzedDocumentIds: ["doc-a"],
+  detectedPreset: "course", unitOfAnalysis: "concept", targetQuestions: [], fieldRules: [], relationRules: [],
   createdAt: "2026-08-17T00:00:00.000Z",
 });
 
@@ -43,10 +45,17 @@ const academicProfile: WikiProfile = {
 };
 
 describe("Wiki generation planning", () => {
-  it("adds a controlled law category when the AI plan omits it", () => {
-    expect(plan("zh").categories).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: "law", label: "定律" }),
-    ]));
+  it("does not force course-only categories into every Wiki mode", () => {
+    expect(plan("zh").categories.some(category => category.role === "law")).toBe(false);
+  });
+
+  it("treats an empty relation preference as AI freedom rather than an edgeless Wiki", () => {
+    const fallback = fallbackGenerationPlan({
+      ...academicProfile,
+      entityTypes: [], importantFields: [], preferredRelations: [],
+    }, []);
+    expect(fallback.relationTypes).toEqual(expect.arrayContaining(["定义", "应用于"]));
+    expect(fallback.relationRules).not.toHaveLength(0);
   });
 
   it("forces Newton's three laws into the law category despite provider type drift", () => {
@@ -78,6 +87,78 @@ describe("Wiki generation planning", () => {
       { name: "惯性原理", type: "概念" },
     ]);
     expect(entity.type).toBe("概念");
+  });
+
+  it("does not classify a rate-of-change relationship as a law", () => {
+    const [entity] = applyPlannedEntityTypes(plan("zh"), [{
+      name: "力矩与角动量变化率关系",
+      type: "定律",
+      summary: "合外力矩等于角动量对时间的变化率。",
+      properties: { 公式: "τ_ext = dL/dt" },
+    }]);
+    expect(entity.type).toBe("公式");
+    expect(entity.classification.status).toBe("corrected");
+  });
+
+  it("requires verified source identity before accepting an AI law proposal", () => {
+    const generated = plan("zh");
+    applyPlannedEntityTypes(generated, [{ name: "示例命名定律", type: "概念" }]);
+    const entity = {
+      name: "输入与输出变化率关系",
+      summary: "描述两个量之间的导数关系。",
+      properties: { 表达式: "dy/dt = kx" },
+    };
+    const rejected = resolveEntityClassification(generated, entity, {
+      categoryId: "law", semanticRole: "law", confidence: .98, explicitIdentity: true,
+      identityEvidence: "这是一个定律", identityEvidenceVerified: false,
+      reason: "模型认为它很重要", source: "llm",
+    });
+    expect(rejected.category.role).toBe("formula");
+    expect(rejected.decision.status).toBe("corrected");
+  });
+
+  it("does not accept a category from the entity name alone", () => {
+    const [entity] = applyPlannedEntityTypes(plan("zh"), [{
+      name: "示例响应定律", type: "概念", summary: "尚无足够上下文。",
+    }]);
+    expect(entity.type).toBe("定律");
+    expect(entity.classification.status).toBe("needs_review");
+    expect(entity.classification.source).toBe("lexical");
+  });
+
+  it("allows independently reviewed semantic context to override a misleading name", () => {
+    const generated = plan("zh");
+    applyPlannedEntityTypes(generated, [{ name: "示例响应定律", type: "概念" }]);
+    const resolved = resolveEntityClassification(generated, {
+      name: "客户增长定律",
+      summary: "公司内部用于计算客户同比增长率的表达式，并非被报告为经验定律。",
+      properties: { 计算公式: "(current - previous) / previous" },
+    }, {
+      categoryId: "formula", semanticRole: "formula", confidence: .93,
+      explicitIdentity: false, identityEvidenceVerified: false,
+      semanticExplanation: "这是一个计算指标变化率的表达式。",
+      decisionFactors: ["属性提供明确计算公式", "原文未将其作为定律报告"],
+      reason: "定义、用途和属性均符合公式类别。", source: "review",
+    });
+    expect(resolved.category.role).toBe("formula");
+    expect(resolved.decision.status).toBe("accepted");
+    expect(resolved.decision.semanticExplanation).toContain("表达式");
+  });
+
+  it("applies the same semantic guard outside course Wikis", () => {
+    const businessPlan = normalizeGenerationPlan({
+      ...plan("zh"), detectedPreset: "business", researchGoal: "分析客户经营指标",
+    }, {
+      ...academicProfile, preset: "business", researchGoal: "分析客户经营指标",
+      entityTypes: ["概念", "指标", "公式", "定律"],
+    });
+    const [entity] = applyPlannedEntityTypes(businessPlan, [{
+      name: "客户流失率与价格变化关系", type: "定律",
+      summary: "描述价格变化与客户流失率之间的统计关系。",
+      properties: { 计算公式: "churn = lost / total" },
+    }]);
+    expect(entity.type).toBe("公式");
+    expect(entity.classification.semanticRole).toBe("formula");
   });
 
   it("keeps user-requested types and rejects corpus entities as top-level categories", () => {
@@ -113,7 +194,7 @@ describe("Wiki generation planning", () => {
   it("builds a fallback ontology directly from the user's requested knowledge types", () => {
     const generated = fallbackGenerationPlan(academicProfile, []);
     expect(generated.categories.map(category => category.label)).toEqual([
-      "概念", "方法", "理论", "实验", "指标", "公式", "定律",
+      "概念", "方法", "理论", "实验", "指标", "公式",
     ]);
   });
 

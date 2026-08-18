@@ -42,6 +42,12 @@ const snapshotFor = (store: Store, projectId: string): ProjectSnapshot | undefin
 
 const titleFrom = (question: string) => question.replace(/\s+/g, " ").trim().slice(0, 72) || "New chat";
 const unique = <T>(values: T[]) => [...new Set(values)];
+const internalReferencePattern = /(?:node|evidence)(?:\s*id)?\s*[:：#]?\s*[a-z0-9][a-z0-9:_-]{7,}|(?:节点|证据)\s*[:：#]?\s*[a-z0-9][a-z0-9:_-]{7,}|\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/iu;
+const hasInternalReference = (text: string, identifiers: Set<string>) =>
+  [...identifiers].some(identifier => identifier.length >= 8 && text.includes(identifier)) || internalReferencePattern.test(text);
+const inferenceMarker = (text: string, language: "en" | "zh" | undefined) => language === "zh"
+  ? /【推断】\s*[:：]?/u.test(text)
+  : /(?:\[?inference\]?|inferred)\s*:/iu.test(text);
 const insufficientWikiAnswer = (language: "en" | "zh" | undefined): ChatAnswer => language === "zh"
   ? { answer: "当前项目的 Wiki 中没有足够的匹配结构化知识来回答这个问题。", claims: [], citations: [], limitations: ["没有检索到相关的 Wiki 节点、关系或证据。请处理更多源文档，或使用当前 Wiki 中已有的实体名称提问。"] }
   : { answer: "The current project Wiki does not contain enough matching structured knowledge to answer this question.", claims: [], citations: [], limitations: ["No relevant Wiki nodes, relations, or evidence were retrieved. Process more source documents or ask with a Wiki entity name."] };
@@ -65,6 +71,13 @@ export class ChatService {
   messages(projectId: string, threadId: string) {
     this.thread(projectId, threadId);
     return this.store.data.chatMessages.filter(message => message.threadId === threadId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async deleteThread(projectId: string, threadId: string) {
+    this.thread(projectId, threadId);
+    this.store.data.chatThreads = this.store.data.chatThreads.filter(thread => thread.id !== threadId);
+    this.store.data.chatMessages = this.store.data.chatMessages.filter(message => message.threadId !== threadId);
+    await this.store.save();
   }
 
   async send(projectId: string, threadId: string, content: string): Promise<{ user: ChatMessage; assistant: ChatMessage }> {
@@ -98,7 +111,7 @@ export class ChatService {
         try {
           const generated = await generateStructured(this.provider, {
             system: wikiChatSystemPrompt(snapshot.project.profile?.outputLanguage),
-            prompt: `${wikiChatPrompt(content, history, context)}${attempt ? "\nYour previous answer used invalid or missing citations. Use only allowed ids and return evidence-bound claims." : ""}`,
+            prompt: `${wikiChatPrompt(content, history, context)}${attempt ? "\nYour previous answer used invalid, missing, or user-visible internal citations, or failed to label an inference. Keep all IDs exclusively in the nodeIds and evidenceIds arrays; write readable prose only; clearly label every inference." : ""}`,
             temperature: 0,
           }, GeneratedAnswerSchema, 1);
           answer = this.bindAndValidateAnswer(generated, context, snapshot);
@@ -139,6 +152,21 @@ export class ChatService {
   private bindAndValidateAnswer(generated: z.infer<typeof GeneratedAnswerSchema>, context: NonNullable<ReturnType<typeof retrieveWikiChatContextForNodeIds>>, snapshot: ProjectSnapshot): ChatAnswer {
     const allowedNodes = new Set(context.allowedNodeIds);
     const allowedEvidence = new Set(context.allowedEvidenceIds);
+    const internalIdentifiers = new Set([...allowedNodes, ...allowedEvidence]);
+    if (
+      hasInternalReference(generated.answer, internalIdentifiers)
+      || generated.claims.some(claim => hasInternalReference(claim.text, internalIdentifiers))
+      || generated.limitations.some(limitation => hasInternalReference(limitation, internalIdentifiers))
+    ) {
+      throw new ChatApiError(502, "The AI exposed an internal reference in user-facing text.");
+    }
+    const inferredClaims = generated.claims.filter(claim => claim.status === "inferred");
+    if (inferredClaims.length && (
+      !inferenceMarker(generated.answer, snapshot.project.profile?.outputLanguage)
+      || inferredClaims.some(claim => !inferenceMarker(claim.text, snapshot.project.profile?.outputLanguage))
+    )) {
+      throw new ChatApiError(502, "The AI did not clearly label its inferred content.");
+    }
     if (generated.claims.some(claim => claim.nodeIds.some(id => !allowedNodes.has(id)) || claim.evidenceIds.some(id => !allowedEvidence.has(id)))) {
       throw new ChatApiError(502, "The AI returned a citation outside the retrieved Wiki context.");
     }

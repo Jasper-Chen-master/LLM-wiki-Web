@@ -13,6 +13,12 @@ export function createChatRouter(store: Store) {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try { res.status(201).json(await service.saveThread(param(req.params, "id"), parsed.data.title)); } catch (error) { next(error); }
   });
+  router.delete("/threads/:threadId", async (req, res, next) => {
+    try {
+      await service.deleteThread(param(req.params, "id"), param(req.params, "threadId"));
+      res.status(204).end();
+    } catch (error) { next(error); }
+  });
   router.get("/threads/:threadId/messages", (req, res, next) => { try { res.json(service.messages(param(req.params, "id"), param(req.params, "threadId"))); } catch (error) { next(error); } });
   router.post("/threads/:threadId/messages", async (req, res, next) => {
     const parsed = SendChatMessageSchema.safeParse(req.body);

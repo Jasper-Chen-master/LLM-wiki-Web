@@ -25,6 +25,7 @@ describe("Wiki chat", () => {
   it("asks the provider to return formulas as LaTeX", () => {
     expect(wikiChatSystemPrompt("zh")).toContain("$...$");
     expect(wikiChatSystemPrompt("zh")).toContain("\\ce{");
+    expect(wikiChatSystemPrompt("zh")).toContain("【推断】");
   });
 
   it("builds model context without raw evidence text", () => {
@@ -61,6 +62,7 @@ describe("Wiki chat", () => {
     const thread = service.createThread(projectId);
     const reply = await service.send(projectId, thread.id, "What practical role does the stored energy play?");
     expect(reply.assistant.content).toContain("retaining energy");
+    expect(store.data.projects[0]?.updatedAt).toBeUndefined();
     expect(vi.mocked(provider.generate)).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(vi.mocked(provider.generate).mock.calls)).not.toContain("SECRET RAW SOURCE TEXT");
   });
@@ -80,6 +82,40 @@ describe("Wiki chat", () => {
       evidenceId, documentName: "paper-a.pdf", page: 7, topic: "Energy storage",
     })]);
     expect(JSON.stringify(vi.mocked(provider.generate).mock.calls)).not.toContain("SECRET RAW SOURCE TEXT");
+  });
+
+  it("retries when an AI answer exposes internal IDs in readable prose", async () => {
+    const provider: LLMProvider = { generate: vi.fn()
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ nodeIds: [nodeId] }) })
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ answer: `Energy storage is supported by (${nodeId}, evidence ${evidenceId}).`, claims: [{ text: `Storage is reported by ${evidenceId}.`, status: "reported", nodeIds: [nodeId], evidenceIds: [evidenceId] }], limitations: [] }) })
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ answer: "Energy storage retains energy for later use.", claims: [{ text: "The Wiki reports that energy storage retains energy for later use.", status: "reported", nodeIds: [nodeId], evidenceIds: [evidenceId] }], limitations: [] }) }) };
+    const store = new Store();
+    vi.spyOn(store, "save").mockResolvedValue();
+    const input = snapshot();
+    store.data.projects.push(input.project); store.data.documents.push(...input.documents); store.data.nodes.push(...input.nodes); store.data.evidence.push(...input.evidence); store.data.jobs.push(input.job!);
+    const service = new ChatService(store, provider);
+    const thread = service.createThread(projectId);
+    const reply = await service.send(projectId, thread.id, "Explain energy storage");
+    expect(reply.assistant.content).not.toContain(nodeId);
+    expect(reply.assistant.content).not.toContain(evidenceId);
+    expect(vi.mocked(provider.generate)).toHaveBeenCalledTimes(3);
+  });
+
+  it("permits evidence-bound inference only when it is explicitly disclosed", async () => {
+    const provider: LLMProvider = { generate: vi.fn()
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ nodeIds: [nodeId] }) })
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ answer: "Energy storage may improve later availability.", claims: [{ text: "Inference: energy storage may improve later availability.", status: "inferred", nodeIds: [nodeId], evidenceIds: [evidenceId] }], limitations: [] }) })
+      .mockResolvedValueOnce({ provider: "test", text: JSON.stringify({ answer: "Inference: Energy storage may improve later availability; this is an evidence-based Wiki synthesis, not a direct source statement.", claims: [{ text: "Inference: energy storage may improve later availability.", status: "inferred", nodeIds: [nodeId], evidenceIds: [evidenceId] }], limitations: [] }) }) };
+    const store = new Store();
+    vi.spyOn(store, "save").mockResolvedValue();
+    const input = snapshot();
+    store.data.projects.push(input.project); store.data.documents.push(...input.documents); store.data.nodes.push(...input.nodes); store.data.evidence.push(...input.evidence); store.data.jobs.push(input.job!);
+    const service = new ChatService(store, provider);
+    const thread = service.createThread(projectId);
+    const reply = await service.send(projectId, thread.id, "What could energy storage enable?");
+    expect(reply.assistant.answer?.claims[0]?.status).toBe("inferred");
+    expect(reply.assistant.content).toContain("Inference:");
+    expect(vi.mocked(provider.generate)).toHaveBeenCalledTimes(3);
   });
 
   it("rejects an AI citation that was not retrieved for the current project", async () => {
@@ -105,5 +141,38 @@ describe("Wiki chat", () => {
     const service = new ChatService(store);
     const thread = service.createThread(projectId);
     await expect(service.send(projectId, thread.id, "介绍角动量")).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("deletes a chat thread together with all of its messages", async () => {
+    const store = new Store();
+    vi.spyOn(store, "save").mockResolvedValue();
+    const input = snapshot();
+    store.data.projects.push(input.project);
+    const service = new ChatService(store);
+    const thread = service.createThread(projectId);
+    store.data.chatMessages.push({ id: "message-a", threadId: thread.id, role: "user", content: "Question", createdAt: new Date().toISOString() });
+    await service.deleteThread(projectId, thread.id);
+    expect(service.listThreads(projectId)).toEqual([]);
+    expect(store.data.chatMessages).toEqual([]);
+    expect(store.save).toHaveBeenCalledOnce();
+  });
+
+  it("deletes conversations in any project without affecting other projects", async () => {
+    const store = new Store();
+    vi.spyOn(store, "save").mockResolvedValue();
+    const input = snapshot();
+    const otherProjectId = "project-b";
+    store.data.projects.push(input.project, { ...input.project, id: otherProjectId, name: "Other project" });
+    const service = new ChatService(store);
+    const firstProjectThread = service.createThread(projectId, "First project chat");
+    const secondProjectThread = service.createThread(otherProjectId, "Second project chat");
+    store.data.chatMessages.push(
+      { id: "message-a", threadId: firstProjectThread.id, role: "user", content: "First question", createdAt: new Date().toISOString() },
+      { id: "message-b", threadId: secondProjectThread.id, role: "user", content: "Second question", createdAt: new Date().toISOString() },
+    );
+    await service.deleteThread(otherProjectId, secondProjectThread.id);
+    expect(service.listThreads(projectId)).toEqual([firstProjectThread]);
+    expect(service.listThreads(otherProjectId)).toEqual([]);
+    expect(store.data.chatMessages).toEqual([expect.objectContaining({ threadId: firstProjectThread.id })]);
   });
 });

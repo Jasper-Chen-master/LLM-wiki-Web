@@ -62,6 +62,7 @@ const copy = {
     review: "Research blueprint awaiting confirmation",
     setup: "Research blueprint not defined",
     created: "Created",
+    lastEdited: "Last edited",
     opening: "Opening project…",
     overview: "Build",
     graph: "Knowledge graph",
@@ -69,6 +70,8 @@ const copy = {
     chat: "Wiki assistant",
     chatSub: "AI interprets your question, reasons over this Wiki, and cites the supporting source pages.",
     newChat: "New inquiry",
+    deleteChat: "Delete inquiry",
+    deleteChatConfirm: "Delete this inquiry and all of its messages? This cannot be undone.",
     askWiki: "Ask about concepts, mechanisms, comparisons, or implications…",
     send: "Ask",
     chatReady: "Answering from the current evidence-linked Wiki.",
@@ -95,12 +98,9 @@ const copy = {
     relationsHint: "causes, improves, measured by, derived from",
     ignore: "Knowledge to leave out",
     ignoreHint: "generic background, unrelated methods",
-    preferences: "Evidence and extraction notes",
-    preferencesHint:
-      "Add definitions, comparison rules, required fields, or other research-specific constraints.",
-    numeric: "Extract numerical data",
-    units: "Preserve units",
-    evidence: "Require source evidence",
+    customRequirements: "Custom generation requirements",
+    customRequirementsHint: "Describe any custom ontology, fields, relation logic, priorities, or output constraints.",
+    classificationDecision: "Classification decision",
     save: "Save blueprint",
     confirm: "Confirm and build Wiki",
     rerun: "Rebuild from current sources",
@@ -150,8 +150,10 @@ const copy = {
     observed: "Observed",
     reported: "Source reported",
     inferred: "Wiki synthesis",
+    inferenceNotice: "AI inference · evidence-based synthesis",
     chatCreateError: "Could not start a new inquiry.",
     chatSendError: "Could not complete this Wiki inquiry.",
+    chatDeleteError: "Could not delete this inquiry.",
     jobQueued: "Queued",
     jobParsing: "Reading sources",
     jobAnalyzing: "Analyzing goal and corpus",
@@ -172,6 +174,12 @@ const copy = {
     jobBuildingGraphMessage: "Connecting Wiki entries to relationships and page-level evidence.",
     jobCompletedMessage: "The evidence-linked Wiki is ready to explore, search, and question.",
     jobFailedMessage: "The build stopped before the Wiki was complete. Review the errors below.",
+    jobCorpusAnalysis: "Corpus analysis batches",
+    jobPlanGeneration: "Wiki structure generation",
+    jobRelevance: "Relevance filtering batches",
+    jobExtraction: "Knowledge extraction batches",
+    jobClassification: "Entity classification batches",
+    jobElapsed: "elapsed",
     documentUploaded: "Awaiting processing",
     documentParsed: "Knowledge extracted",
     documentFailed: "Processing failed",
@@ -196,6 +204,7 @@ const copy = {
     review: "研究蓝图等待确认",
     setup: "尚未定义研究蓝图",
     created: "创建于",
+    lastEdited: "最近编辑于",
     opening: "正在打开项目…",
     overview: "构建",
     graph: "知识图谱",
@@ -203,6 +212,8 @@ const copy = {
     chat: "Wiki 助手",
     chatSub: "AI 先理解你的问题，再结合当前 Wiki 分析，并标注支撑回答的文件与页码。",
     newChat: "新建研究问题",
+    deleteChat: "删除研究问题",
+    deleteChatConfirm: "确定删除这个研究问题及其全部消息吗？此操作无法撤销。",
     askWiki: "询问概念、机制、差异、联系或实际含义…",
     send: "提问",
     chatReady: "当前回答仅依据这一版有证据支撑的 Wiki。",
@@ -228,11 +239,9 @@ const copy = {
     relationsHint: "导致、提升、通过…测量、由…推导",
     ignore: "不进入主 Wiki 的内容",
     ignoreHint: "通用背景、无关方法、重复描述",
-    preferences: "证据与提取说明",
-    preferencesHint: "可补充定义要求、对比维度、必需字段或其他研究约束。",
-    numeric: "提取数值数据",
-    units: "保留单位",
-    evidence: "必须绑定来源证据",
+    customRequirements: "自定义生成要求",
+    customRequirementsHint: "描述自定义分类、字段、关系逻辑、优先级或输出约束。",
+    classificationDecision: "分类决策",
     save: "保存研究蓝图",
     confirm: "确认并构建 Wiki",
     rerun: "按当前材料重新构建",
@@ -281,8 +290,10 @@ const copy = {
     observed: "直接观察",
     reported: "来源陈述",
     inferred: "Wiki 综合分析",
+    inferenceNotice: "以下为 AI 推断 · 基于证据综合",
     chatCreateError: "无法新建研究问题。",
     chatSendError: "无法完成本次 Wiki 分析。",
+    chatDeleteError: "无法删除这个研究问题。",
     jobQueued: "等待构建",
     jobParsing: "正在读取材料",
     jobAnalyzing: "正在联合分析目标与材料",
@@ -303,6 +314,12 @@ const copy = {
     jobBuildingGraphMessage: "正在连接 Wiki 条目、知识关系与页级证据。",
     jobCompletedMessage: "证据可追溯的 Wiki 已经可以探索、检索与问答。",
     jobFailedMessage: "Wiki 尚未构建完成，请查看下方错误信息。",
+    jobCorpusAnalysis: "语料分析批次",
+    jobPlanGeneration: "Wiki 结构设计",
+    jobRelevance: "相关性筛选批次",
+    jobExtraction: "知识抽取批次",
+    jobClassification: "实体分类批次",
+    jobElapsed: "已用时",
     documentUploaded: "等待处理",
     documentParsed: "知识已提取",
     documentFailed: "处理失败",
@@ -312,12 +329,11 @@ const templateCopy = {
   en: {
     templates: "Blueprint presets",
     research: "Academic evidence",
-    reading: "Argument mapping",
-    personalGrowth: "Actionable insights",
-    general: "General knowledge",
+    course: "Course & learning",
+    experimental: "Experiments & samples",
+    general: "Smart auto-detect",
     business: "Business evidence",
     custom: "Custom blueprint",
-    outputLanguage: "Wiki language",
     templateHint:
       "Start from a research blueprint, or define a custom knowledge boundary.",
      templateNoSources:
@@ -328,12 +344,11 @@ const templateCopy = {
   zh: {
     templates: "研究蓝图预设",
     research: "学术证据",
-    reading: "论证梳理",
-    personalGrowth: "行动洞察",
-    general: "通用知识",
+    course: "课程与学习",
+    experimental: "实验与样品",
+    general: "智能识别",
     business: "商业证据",
     custom: "自定义蓝图",
-    outputLanguage: "Wiki 语言",
     templateHint:
       "从预设研究蓝图开始，或选择「自定义蓝图」定义自己的知识边界。",
     templateNoSources: "研究蓝图已应用。请添加证据来源，再开始构建 Wiki。",
@@ -366,9 +381,11 @@ const emptyProfile: WikiProfile = {
   extractTables: false,
   evidenceRequired: true,
   notes: "",
+  preset: "auto",
+  customRequirements: "",
 };
 const PRESET_TEMPLATES: Record<
-  "research" | "reading" | "personal-growth" | "general" | "business",
+  "general" | "research" | "course" | "experimental" | "business",
   { en: WikiProfile; zh: WikiProfile }
 > = {
   research: {
@@ -415,96 +432,15 @@ const PRESET_TEMPLATES: Record<
       notes: "",
     },
   },
-  reading: {
-    en: {
-    version: "1.0",
-    researchGoal:
-      "Capture the key arguments, claims, and concepts from the reading, and map how the author builds and supports them.",
-    domain: "Reading notes",
-    entityTypes: ["topic", "argument", "claim", "concept", "term", "example"],
-    importantFields: ["main point", "argument", "example", "definition"],
-    preferredRelations: [
-      "supports",
-      "refutes",
-      "leads to",
-      "exemplifies",
-      "contrasts with",
-    ],
-    exclude: [],
-    extractNumericData: false,
-    preserveUnits: false,
-    extractTables: false,
-    evidenceRequired: true,
-    notes: "",
-    },
-    zh: {
-      version: "1.0",
-      researchGoal: "捕捉阅读材料中的关键论点、主张与概念，梳理作者如何构建并支持论证。",
-      domain: "阅读笔记",
-      entityTypes: ["主题", "论点", "主张", "概念", "术语", "例子"],
-      importantFields: ["核心观点", "论证", "例子", "定义"],
-      preferredRelations: ["支持", "反驳", "引出", "举例", "对比"],
-      exclude: [],
-      extractNumericData: false,
-      preserveUnits: false,
-      extractTables: false,
-      evidenceRequired: true,
-      notes: "",
-    },
-  },
-  "personal-growth": {
-    en: {
-    version: "1.0",
-    researchGoal:
-      "Extract actionable advice, habits, methods, and mental models that can be applied to improve oneself.",
-    domain: "Personal growth",
-    entityTypes: [
-      "habit",
-      "method",
-      "principle",
-      "mindset",
-      "tool",
-      "action item",
-    ],
-    importantFields: ["advice", "steps", "principle", "action"],
-    preferredRelations: [
-      "enables",
-      "requires",
-      "practices",
-      "applies",
-      "avoids",
-    ],
-    exclude: [],
-    extractNumericData: false,
-    preserveUnits: false,
-    extractTables: false,
-    evidenceRequired: true,
-    notes: "",
-    },
-    zh: {
-      version: "1.0",
-      researchGoal: "提取可行动的建议、习惯、方法与心智模型，用于自我提升。",
-      domain: "个人成长",
-      entityTypes: ["习惯", "方法", "原则", "心态", "工具", "行动项"],
-      importantFields: ["建议", "步骤", "原则", "行动"],
-      preferredRelations: ["促成", "需要", "实践", "应用", "避免"],
-      exclude: [],
-      extractNumericData: false,
-      preserveUnits: false,
-      extractTables: false,
-      evidenceRequired: true,
-      notes: "",
-    },
-  },
   general: {
     en: {
     version: "1.0",
     researchGoal:
-      "Build a comprehensive knowledge map of the key concepts, entities, and relationships found in the document.",
-    domain: "General knowledge",
-    entityTypes: ["concept", "entity", "attribute", "event", "data point"],
-    importantFields: ["definition", "attribute", "relationship"],
-    preferredRelations: ["relates to", "contains", "belongs to", "affects"],
+      "Detect the document purpose and build the smallest sufficient evidence-grounded Wiki for understanding, retrieval, comparison, analysis, or decision support.",
+    domain: "Auto-detected",
+    entityTypes: [],
+    importantFields: ["definition", "evidence"],
+    preferredRelations: [],
     exclude: [],
     extractNumericData: true,
     preserveUnits: true,
@@ -514,11 +450,11 @@ const PRESET_TEMPLATES: Record<
     },
     zh: {
       version: "1.0",
-      researchGoal: "构建文档中关键概念、实体与关系的全面知识图谱。",
-      domain: "通用知识",
-      entityTypes: ["概念", "实体", "属性", "事件", "数据点"],
-      importantFields: ["定义", "属性", "关系"],
-      preferredRelations: ["相关", "包含", "属于", "影响"],
+      researchGoal: "自动识别文档用途，生成满足理解、检索、比较、分析或决策需求的最小充分、证据可追溯 Wiki。",
+      domain: "自动识别",
+      entityTypes: [],
+      importantFields: ["定义", "证据"],
+      preferredRelations: [],
       exclude: [],
       extractNumericData: true,
       preserveUnits: true,
@@ -571,6 +507,24 @@ const PRESET_TEMPLATES: Record<
       notes: "",
     },
   },
+  course: {
+    en: { version: "1.0", researchGoal: "Build a learning Wiki that preserves concepts, definitions, laws, formulas, derivations, examples, and prerequisite structure across the course.", domain: "Course learning", entityTypes: ["concept", "law", "formula", "method", "example", "quantity"], importantFields: ["definition", "formula", "derivation", "conditions", "example"], preferredRelations: ["defines", "derives", "requires", "applies to", "exemplifies"], exclude: ["administrative course information"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "" },
+    zh: { version: "1.0", researchGoal: "构建保留课程概念、定义、定律、公式、推导、例题与先修结构的学习 Wiki。", domain: "课程学习", entityTypes: ["概念", "定律", "公式", "方法", "例子", "物理量"], importantFields: ["定义", "公式", "推导", "适用条件", "例子"], preferredRelations: ["定义", "推导", "依赖", "应用于", "举例"], exclude: ["课程行政信息"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "" },
+  },
+  experimental: {
+    en: { version: "1.0", researchGoal: "Extract experiments as condition-bound records and connect samples, procedures, measurements, observations, mechanisms, and outcomes without merging incompatible conditions.", domain: "Experimental research", entityTypes: ["sample", "material", "process", "experiment", "measurement", "mechanism", "outcome"], importantFields: ["sample identity", "conditions", "procedure", "value", "unit", "uncertainty", "evidence"], preferredRelations: ["prepared by", "tested under", "measured by", "produces", "affects"], exclude: [], extractNumericData: true, preserveUnits: true, extractTables: true, evidenceRequired: true, notes: "" },
+    zh: { version: "1.0", researchGoal: "以实验条件为边界提取记录，连接样品、工艺、测量、观察、机制与结果，禁止合并不兼容条件。", domain: "实验研究", entityTypes: ["样品", "材料", "工艺", "实验", "测量", "机制", "结果"], importantFields: ["样品标识", "实验条件", "步骤", "数值", "单位", "不确定度", "证据"], preferredRelations: ["制备于", "测试条件", "测量方法", "产生", "影响"], exclude: [], extractNumericData: true, preserveUnits: true, extractTables: true, evidenceRequired: true, notes: "" },
+  },
+};
+type PresetTemplateId = keyof typeof PRESET_TEMPLATES;
+const TEMPLATE_PRESETS: Record<PresetTemplateId, NonNullable<WikiProfile["preset"]>> = {
+  general: "auto", research: "research", course: "course",
+  experimental: "experimental", business: "business",
+};
+const templateForProfile = (profile: WikiProfile | undefined): PresetTemplateId | "custom" => {
+  if (!profile?.preset || profile.preset === "custom") return "custom";
+  if (profile.preset === "auto") return "general";
+  return (Object.entries(TEMPLATE_PRESETS).find(([, preset]) => preset === profile.preset)?.[0] as PresetTemplateId | undefined) ?? "custom";
 };
 const split = (input: string) =>
   input
@@ -729,6 +683,7 @@ function ProjectList() {
                     {t.created}{" "}
                     {new Date(project.createdAt).toLocaleDateString()}
                   </small>
+                  <small>{t.lastEdited} {new Date(project.updatedAt ?? project.createdAt).toLocaleString()}</small>
                   <span className="arrow">→</span>
                 </Link>
               </div>
@@ -761,9 +716,16 @@ function Workspace() {
   useEffect(() => {
     if (!snapshot?.job || ["completed", "failed"].includes(snapshot.job.status))
       return;
-    const timer = window.setInterval(() => void load(), 1_000);
+    const pollJob = async () => {
+      try {
+        const job = await api.latestJob(projectId);
+        if (["completed", "failed"].includes(job.status)) await load();
+        else setSnapshot((current) => current ? { ...current, job } : current);
+      } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not refresh processing status"); }
+    };
+    const timer = window.setInterval(() => void pollJob(), 1_000);
     return () => window.clearInterval(timer);
-  }, [snapshot?.job?.status, load]);
+  }, [snapshot?.job?.id, snapshot?.job?.status, projectId, load]);
   if (error)
     return (
       <main className="page">
@@ -819,6 +781,7 @@ function Overview({
   const { t, lang } = useI18n();
   const { project } = snapshot;
   const projectId = project.id;
+  const buildRunning = Boolean(snapshot.job && !["completed", "failed"].includes(snapshot.job.status));
   const [profile, setProfile] = useState<WikiProfile>(
     () => overviewDrafts.get(projectId)?.profile ?? project.profile ?? emptyProfile,
   );
@@ -826,7 +789,7 @@ function Overview({
     [error, setError] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
     [selectedTemplate, setSelectedTemplate] = useState<string>(
-      () => overviewDrafts.get(projectId)?.selectedTemplate ?? "custom",
+      () => overviewDrafts.get(projectId)?.selectedTemplate ?? templateForProfile(project.profile),
     ),
     [templateHint, setTemplateHint] = useState("");
   useEffect(() => {
@@ -836,7 +799,7 @@ function Overview({
   useEffect(() => {
     const draft = overviewDrafts.get(projectId);
     setProfile(draft?.profile ?? project.profile ?? emptyProfile);
-    setSelectedTemplate(draft?.selectedTemplate ?? "custom");
+    setSelectedTemplate(draft?.selectedTemplate ?? templateForProfile(project.profile));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
   useEffect(() => {
@@ -846,21 +809,24 @@ function Overview({
   }, [snapshot.documents]);
   const prevLang = useRef(lang);
   useEffect(() => {
-    if (selectedTemplate === "custom") return;
     if (prevLang.current === lang) return;
     prevLang.current = lang;
+    if (selectedTemplate === "custom") {
+      setProfile((current) => ({ ...current, outputLanguage: lang }));
+      return;
+    }
     const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
     if (!template) return;
-    setProfile({ ...template[lang], outputLanguage: lang });
+    setProfile({ ...template[lang], preset: TEMPLATE_PRESETS[selectedTemplate as PresetTemplateId], outputLanguage: lang });
   }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
     value: WikiProfile[keyof WikiProfile],
   ) => setProfile((previous) => ({ ...previous, [key]: value }));
-  const applyTemplate = async (templateId: keyof typeof PRESET_TEMPLATES) => {
+  const applyTemplate = async (templateId: PresetTemplateId) => {
     const template = PRESET_TEMPLATES[templateId][lang];
     setSelectedTemplate(templateId);
-    setProfile({ ...template, outputLanguage: lang });
+    setProfile({ ...template, preset: TEMPLATE_PRESETS[templateId], outputLanguage: lang });
     setTemplateHint(
       snapshot.documents.some((document) => document.role === "source")
         ? t.templateApplied
@@ -870,7 +836,7 @@ function Overview({
   const selectCustom = () => {
     setSelectedTemplate("custom");
     setTemplateHint(t.templateHint);
-    setProfile({ ...emptyProfile, outputLanguage: lang });
+    setProfile({ ...emptyProfile, preset: "custom", outputLanguage: lang });
   };
   const upload = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -881,7 +847,11 @@ function Overview({
     try {
       for (const file of Array.from(files))
         await api.upload(project.id, file, role);
-      if (role === "profile") await api.understandProfile(project.id);
+      if (role === "profile") {
+        const understood = await api.understandProfile(project.id);
+        setProfile(understood.profile);
+        setSelectedTemplate(templateForProfile(understood.profile));
+      }
       await reload();
     } catch (e) {
       setError((e as Error).message);
@@ -892,7 +862,7 @@ function Overview({
   const save = async () => {
     setSaving(true);
     try {
-      const savedProfile = { ...profile, outputLanguage: profile.outputLanguage ?? lang };
+      const savedProfile = { ...profile, outputLanguage: lang };
       setProfile(savedProfile);
       await api.updateProfile(project.id, savedProfile);
       await reload();
@@ -903,9 +873,10 @@ function Overview({
     }
   };
   const confirm = async () => {
+    if (buildRunning) return;
     setSaving(true);
     try {
-      const savedProfile = { ...profile, outputLanguage: profile.outputLanguage ?? lang };
+      const savedProfile = { ...profile, outputLanguage: lang };
       setProfile(savedProfile);
       await api.updateProfile(project.id, savedProfile);
       await api.confirm(project.id);
@@ -981,10 +952,10 @@ function Overview({
             </div>
             <div className="template-chips">
               {([
-                ["research", t.research],
-                ["reading", t.reading],
-                ["personal-growth", t.personalGrowth],
                 ["general", t.general],
+                ["research", t.research],
+                ["course", t.course],
+                ["experimental", t.experimental],
                 ["business", t.business],
               ] as const).map(([id, label]) => (
                 <button key={id} type="button" className={selectedTemplate === id ? "selected" : ""} disabled={saving} onClick={() => void applyTemplate(id)}>{label}</button>
@@ -993,19 +964,6 @@ function Overview({
             </div>
           </div>
           {templateHint && <p className="template-help">{templateHint}</p>}
-          <div className="output-lang">
-            <label htmlFor="output-language">{t.outputLanguage}</label>
-            <select
-              id="output-language"
-              value={profile.outputLanguage ?? lang}
-              onChange={(e) =>
-                update("outputLanguage", e.target.value as "en" | "zh")
-              }
-            >
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-            </select>
-          </div>
           <Field label={t.objective}>
             <textarea
               value={profile.researchGoal}
@@ -1046,40 +1004,23 @@ function Overview({
               />
             </Field>
           </div>
-          <Field label={t.preferences}>
+          <Field label={t.customRequirements}>
             <textarea
-              value={profile.notes}
-              onChange={(e) => update("notes", e.target.value)}
-              placeholder={t.preferencesHint}
+              value={profile.customRequirements ?? ""}
+              onChange={(e) => update("customRequirements", e.target.value)}
+              placeholder={t.customRequirementsHint}
             />
           </Field>
-          <div className="toggles">
-            <Toggle
-              label={t.numeric}
-              checked={profile.extractNumericData}
-              onChange={(v) => update("extractNumericData", v)}
-            />
-            <Toggle
-              label={t.units}
-              checked={profile.preserveUnits}
-              onChange={(v) => update("preserveUnits", v)}
-            />
-            <Toggle
-              label={t.evidence}
-              checked={profile.evidenceRequired}
-              onChange={(v) => update("evidenceRequired", v)}
-            />
-          </div>
           <div className="actions">
             <button className="button ghost" disabled={saving} onClick={save}>
               {t.save}
             </button>
             <button
               className="button primary"
-              disabled={saving || !(profile.researchGoal ?? "").trim()}
+              disabled={saving || buildRunning || !(profile.researchGoal ?? "").trim()}
               onClick={confirm}
             >
-              {saving
+              {saving || buildRunning
                 ? t.working
                 : project.profileConfirmed
                   ? t.reprocess
@@ -1397,6 +1338,23 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                   label={t.importance}
                   value={`${Math.round(selected.importance * 100)}%`}
                 />
+                {selected.classification ? (
+                  <>
+                    <h3>{t.classificationDecision}</h3>
+                    <p className="muted">
+                      {selected.classification.status === "accepted"
+                        ? (lang === "zh" ? "已验证" : "Validated")
+                        : selected.classification.status === "corrected"
+                          ? (lang === "zh" ? "已自动纠正" : "Auto-corrected")
+                          : (lang === "zh" ? "需要复核" : "Needs review")}
+                      {` · ${Math.round(selected.classification.confidence * 100)}%`}
+                    </p>
+                    {selected.classification.semanticExplanation ? (
+                      <p>{selected.classification.semanticExplanation}</p>
+                    ) : null}
+                    <p className="muted">{selected.classification.reason}</p>
+                  </>
+                ) : null}
                 <h3>{t.properties}</h3>
                 {Object.keys(selected.properties).length ? (
                   <dl>
@@ -1642,14 +1600,46 @@ function renderBareChemistry(content: string, keyPrefix: number) {
     return <span key={`chem-${keyPrefix}-${lineIndex}`}>{prefix}<span className="chat-math" dangerouslySetInnerHTML={{ __html: katex.renderToString(tex, { throwOnError: false, trust: false }) }} />{suffix}</span>;
   });
 }
+function normalizeChatMath(content: string) {
+  const formulaLike = (value: string) =>
+    !/[\p{Script=Han}]/u.test(value)
+    && /(?:=|≈|≤|≥|≠|∝|\\(?:frac|sum|int|vec|mathbf|mathrm)\b|[A-Za-zα-ωΑ-Ω]\s*(?:_|\^|[*/×]))/u.test(value);
+  const toLatex = (value: string) => toWikiLatex(value)
+    .replace(/²/gu, "^2")
+    .replace(/³/gu, "^3")
+    .replace(/·/gu, "\\cdot ");
+  return content
+    .replace(/\\\[([\s\S]+?)\\\]/gu, "$$$$$1$$$$")
+    .replace(/\\\(([^\n]+?)\\\)/gu, "$$$1$")
+    .replace(/((?:公式|方程)(?:为|是)?\s*|(?:formula|equation)(?:\s+is)?\s*)([^。\n]+)(?=。|\n|$)/giu, (full, prefix: string, candidate: string) => {
+      const trimmed = candidate.trim();
+      return formulaLike(trimmed) ? `${prefix}$${toLatex(trimmed)}$` : full;
+    });
+}
+
 function renderChatText(content: string) {
-  return content.split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g).map((part, index) => {
+  return normalizeChatMath(content).split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g).map((part, index) => {
     const display = part.startsWith("$$") && part.endsWith("$$");
     const inline = !display && part.startsWith("$") && part.endsWith("$");
     if (!display && !inline) return renderBareChemistry(part, index);
     const tex = part.slice(display ? 2 : 1, display ? -2 : -1).trim();
     return <span key={`${index}-${tex}`} className={display ? "chat-math display" : "chat-math"} dangerouslySetInnerHTML={{ __html: katex.renderToString(tex, { displayMode: display, throwOnError: false, trust: false }) }} />;
   });
+}
+
+// Earlier Wiki-chat records may contain IDs that were once returned in prose.
+// Citations are rendered separately, so hide implementation identifiers without
+// changing the saved message or the server-side evidence binding.
+function readableChatContent(content: string) {
+  const taggedIdentifier = String.raw`(?:(?:node|evidence)(?:\s*id)?|节点|证据)\s*[:：#]?\s*[a-z0-9][a-z0-9:_-]{7,}`;
+  return content
+    .replace(new RegExp(String.raw`[（(]\s*(?:${taggedIdentifier}\s*[,，、;；]?\s*)+[）)]`, "giu"), "")
+    .replace(new RegExp(taggedIdentifier, "giu"), "")
+    .replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/giu, "")
+    .replace(/[（(]\s*[,，、;；\s]*[）)]/gu, "")
+    .replace(/[，,、]\s*[，,、]+/gu, "，")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
 }
 
 function toWikiLatex(formula: string) {
@@ -1690,7 +1680,7 @@ function renderStructuredValue(content: string) {
 function ChatClaimStatuses({ claims }: { claims: ChatClaim[] }) {
   const { t } = useI18n();
   const counts = claims.reduce<Record<string, number>>((current, claim) => ({ ...current, [claim.status]: (current[claim.status] ?? 0) + 1 }), {});
-  return <div className="chat-claims">{Object.entries(counts).map(([status, count]) => <span key={status} className={`claim-status ${status}`}>{status === "observed" ? t.observed : status === "inferred" ? t.inferred : t.reported} × {count}</span>)}</div>;
+  return <div className="chat-claims">{Object.entries(counts).map(([status, count]) => <span key={status} className={`claim-status ${status}`}>{status === "observed" ? t.observed : status === "inferred" ? t.inferenceNotice : t.reported} × {count}</span>)}</div>;
 }
 function chatCitationLabel(citation: ChatCitation, language: Language, pageLabel: string, snapshot: ProjectSnapshot) {
   const documentName = citation.documentName.replace(/\.(pdf|docx)$/i, "");
@@ -1733,6 +1723,18 @@ function ChatView({ snapshot }: { snapshot: ProjectSnapshot }) {
       setMessages([]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : t.chatCreateError); }
   };
+  const deleteThread = async (threadId: string) => {
+    if (!window.confirm(t.deleteChatConfirm)) return;
+    try {
+      setError("");
+      await api.deleteChatThread(snapshot.project.id, threadId);
+      setThreads((current) => current.filter((thread) => thread.id !== threadId));
+      if (activeThreadId === threadId) {
+        setActiveThreadId((current) => current === threadId ? "" : current);
+        setMessages([]);
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t.chatDeleteError); }
+  };
   const send = async () => {
     const question = draft.trim();
     if (!question || sending || !ready) return;
@@ -1771,13 +1773,13 @@ function ChatView({ snapshot }: { snapshot: ProjectSnapshot }) {
       {error ? <Alert message={error} /> : null}
       <section className="chat-layout">
         <aside className="chat-threads">
-          {threads.length ? threads.map((thread) => <button key={thread.id} className={thread.id === activeThreadId ? "active" : ""} onClick={() => setActiveThreadId(thread.id)}><strong>{thread.title}</strong><small>{t.wikiVersion} {thread.wikiRevision}</small></button>) : <p className="muted">{t.noChats}</p>}
+          {threads.length ? threads.map((thread) => <div key={thread.id} className={`chat-thread ${thread.id === activeThreadId ? "active" : ""}`}><button className="chat-thread-select" onClick={() => setActiveThreadId(thread.id)}><strong>{thread.title}</strong><small>{t.wikiVersion} {thread.wikiRevision}</small></button><button className="chat-thread-delete" type="button" onClick={() => void deleteThread(thread.id)} aria-label={`${t.deleteChat}: ${thread.title}`} title={t.deleteChat}>×</button></div>) : <p className="muted">{t.noChats}</p>}
         </aside>
         <div className="chat-panel">
           <p className="chat-revision">{t.chatReady} · {t.wikiVersion} {snapshot.project.wikiRevision ?? 0}</p>
           <div className="chat-messages" ref={messagesRef} aria-live="polite">
             {messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
-              <div className="chat-message-content">{renderChatText(message.content)}</div>
+              <div className="chat-message-content">{renderChatText(readableChatContent(message.content))}</div>
               {message.answer?.claims.length ? <ChatClaimStatuses claims={message.answer.claims} /> : null}
               {message.answer?.citations.length ? <div className="chat-citations"><strong>{t.citations}</strong>{message.answer.citations.map((citation) => <span key={citation.evidenceId}>{chatCitationLabel(citation, lang, t.page, snapshot)}</span>)}</div> : null}
               {message.answer?.limitations.length ? <div className="chat-limitations"><strong>{t.limitations}</strong>{message.answer.limitations.map((item) => <span key={item}>{item}</span>)}</div> : null}
@@ -1825,27 +1827,6 @@ function Field({
     <label className="field">
       <span>{label}</span>
       {children}
-    </label>
-  );
-}
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <label className="toggle">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span />
-      {label}
     </label>
   );
 }
@@ -1905,6 +1886,20 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
     completed: { label: t.jobCompleted, message: t.jobCompletedMessage },
     failed: { label: t.jobFailed, message: t.jobFailedMessage },
   }[job.status] : undefined;
+  const batch = job?.batchProgress;
+  const batchLabel = batch ? {
+    corpus_analysis: t.jobCorpusAnalysis,
+    plan_generation: t.jobPlanGeneration,
+    relevance: t.jobRelevance,
+    extraction: t.jobExtraction,
+    classification: t.jobClassification,
+    classification_review: t.jobClassification,
+  }[batch.phase] : undefined;
+  const elapsed = batch
+    ? batch.elapsedSeconds >= 60
+      ? `${Math.floor(batch.elapsedSeconds / 60)}m ${batch.elapsedSeconds % 60}s`
+      : `${batch.elapsedSeconds}s`
+    : undefined;
   return (
     <section className="panel job-panel">
       <p className="eyebrow">03 · {t.processing}</p>
@@ -1922,6 +1917,9 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
             <i style={{ width: `${job.progress}%` }} />
           </div>
           <p>{presentation?.message ?? job.message}</p>
+          {batch && batchLabel && (
+            <p className="muted">{batchLabel}：{batch.completed}/{batch.total} · {t.jobElapsed} {elapsed}</p>
+          )}
           {job.errors.map((error) => (
             <Alert key={error} message={error} />
           ))}

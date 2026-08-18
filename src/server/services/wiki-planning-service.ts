@@ -2,6 +2,7 @@ import type {
   DocumentBlock,
   WikiCategory,
   WikiCategoryRole,
+  WikiClassificationDecision,
   WikiGenerationPlan,
   WikiNode,
   WikiProfile,
@@ -42,6 +43,53 @@ const CATEGORY_DEFAULTS: Record<"en" | "zh", Record<WikiCategoryRole, Pick<WikiC
 
 const unique = <T>(values: T[]) => [...new Set(values)];
 const normalized = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase();
+
+function qualityPolicy(profile?: WikiProfile) {
+  switch (profile?.qualityPreference) {
+    case "precision_first": return { relevanceThreshold: .6, entityThreshold: .72, relationThreshold: .8, criticalCoverageTarget: .9, maximumGenericRelationRatio: .05 };
+    case "recall_first": return { relevanceThreshold: .3, entityThreshold: .5, relationThreshold: .68, criticalCoverageTarget: .95, maximumGenericRelationRatio: .15 };
+    default: return { relevanceThreshold: .42, entityThreshold: .6, relationThreshold: .74, criticalCoverageTarget: .9, maximumGenericRelationRatio: .1 };
+  }
+}
+
+function defaultFieldRules(profile: WikiProfile | undefined, plan: WikiGenerationPlan) {
+  if (plan.fieldRules?.length) return plan.fieldRules;
+  return unique([...(profile?.importantFields ?? []), ...plan.requiredKnowledge]).slice(0, 32).map((label, index) => ({
+    id: `field-${index + 1}`, label, description: label,
+    priority: index < Math.max(1, profile?.importantFields.length ?? 0) ? "critical" as const : "high" as const,
+    valueType: "text" as const, unitRequired: false, evidenceRequired: profile?.evidenceRequired ?? true,
+  }));
+}
+
+function defaultRelationRules(plan: WikiGenerationPlan) {
+  const existing = plan.relationRules ?? [];
+  const labels = new Set(existing.map(rule => normalized(rule.label)));
+  const added = plan.relationTypes.filter(label => !labels.has(normalized(label))).map((label, index) => ({
+    id: `relation-${existing.length + index + 1}`, label, definition: label,
+    allowedSourceCategoryIds: [], allowedTargetCategoryIds: [], symmetric: false,
+    requiresConditions: false, allowInferred: false,
+  }));
+  return [...existing, ...added];
+}
+
+function fallbackRelationTypes(profile: WikiProfile, language: "en" | "zh") {
+  if (profile.preferredRelations.length) return profile.preferredRelations;
+  // This is only used when the planning model is unavailable. It keeps an empty user preference
+  // from becoming an instruction to build an edgeless Wiki; extraction still needs direct evidence.
+  return language === "zh"
+    ? ["定义", "应用于", "依赖于", "导致", "通过…测量"]
+    : ["defines", "applies to", "depends on", "causes", "measured by"];
+}
+
+function normalizeRelationCategoryIds(planCategories: WikiCategory[], finalCategories: WikiCategory[], ids: string[]) {
+  return unique(ids.flatMap(value => {
+    const direct = finalCategories.find(category => [category.id, category.label].some(item => normalized(item) === normalized(value)));
+    if (direct) return [direct.id];
+    const original = planCategories.find(category => [category.id, category.label].some(item => normalized(item) === normalized(value)));
+    const byRole = original && finalCategories.find(category => category.role === original.role);
+    return byRole ? [byRole.id] : [];
+  }));
+}
 
 export interface CorpusSample {
   documentId: string;
@@ -107,9 +155,11 @@ export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: Wiki
     const idKey = normalized(category.id);
     const labelKey = normalized(category.label);
     if (!idKey || seenIds.has(idKey) || seenLabels.has(labelKey)) continue;
-    // AI may discover broad missing roles, but corpus topics and individual entities are not ontology classes.
-    if (category.role === "other" || categories.some(existing => existing.role === category.role)) continue;
-    const broadCategory = requiredCategory(plan.outputLanguage, category.role);
+    // In auto/custom mode the corpus may define reusable domain classes represented by the
+    // generic `other` role (company, clause, component, claim, sample...). User-provided types
+    // remain authoritative when present; semantic built-ins are still deduplicated by role.
+    if (category.role !== "other" && categories.some(existing => existing.role === category.role)) continue;
+    const broadCategory = category.role === "other" ? category : requiredCategory(plan.outputLanguage, category.role);
     categories.push({
       ...broadCategory,
       inclusionExamples: category.inclusionExamples,
@@ -118,17 +168,29 @@ export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: Wiki
     seenIds.add(normalized(broadCategory.id));
     seenLabels.add(normalized(broadCategory.label));
   }
-  for (const role of ["law", "concept"] as const) {
-    if (categories.some(category => category.role === role)) continue;
-    const category = requiredCategory(plan.outputLanguage, role);
-    if (categories.length >= 16) categories.pop();
-    if (!seenIds.has(category.id)) categories.push(category);
+  if (!categories.length) {
+    categories.push(requiredCategory(plan.outputLanguage, "concept"));
   }
-  return {
+  const normalizedPlan = {
     ...plan,
+    version: "2.0" as const,
     requiredKnowledge: unique([...(profile?.importantFields ?? []), ...plan.requiredKnowledge]).slice(0, 24),
     relationTypes: unique([...(profile?.preferredRelations ?? []), ...plan.relationTypes]).slice(0, 24),
     categories: categories.slice(0, 16),
+    detectedPreset: profile?.preset && profile.preset !== "auto" ? profile.preset : plan.detectedPreset ?? "auto",
+    unitOfAnalysis: profile?.unitOfAnalysis || plan.unitOfAnalysis || "",
+    targetQuestions: unique([...(profile?.targetQuestions ?? []), ...(plan.targetQuestions ?? [])]).slice(0, 20),
+    qualityPolicy: plan.qualityPolicy ?? qualityPolicy(profile),
+  };
+  const relationRules = defaultRelationRules(normalizedPlan).map(rule => ({
+    ...rule,
+    allowedSourceCategoryIds: normalizeRelationCategoryIds(plan.categories, normalizedPlan.categories, rule.allowedSourceCategoryIds),
+    allowedTargetCategoryIds: normalizeRelationCategoryIds(plan.categories, normalizedPlan.categories, rule.allowedTargetCategoryIds),
+  }));
+  return {
+    ...normalizedPlan,
+    fieldRules: defaultFieldRules(profile, normalizedPlan),
+    relationRules,
   };
 }
 
@@ -143,6 +205,10 @@ const ROLE_PATTERNS: Array<[WikiCategoryRole, RegExp]> = [
   ["experiment", /(?:实验|试验|测试|experiment|test)\b|(?:实验|试验|测试)$/iu],
   ["phenomenon", /(?:现象|效应|行为|phenomenon|effect|behavior)\b|(?:现象|效应)$/iu],
 ];
+
+const RELATION_LIKE_NAME = /(?:关系|关联|相关性|变化率|比例关系|依赖关系|relationship|relation|correlation|rate of change)$/iu;
+const FORMULA_SIGNAL = /(?:公式|方程|表达式|等式|formula|equation|expression|\b[a-zα-ω]\s*=|[=∑∫∂])/iu;
+const NAMED_IDENTITY_ROLES = new Set<WikiCategoryRole>(["law", "theorem", "theory"]);
 
 const TYPE_ROLE_ALIASES: Record<WikiCategoryRole, string[]> = {
   law: ["law", "rule", "定律", "定则"],
@@ -171,15 +237,137 @@ function roleFromType(type: string | undefined): WikiCategoryRole | undefined {
     .find(([, aliases]) => aliases.some(alias => value === normalized(alias)))?.[0];
 }
 
-export function categoryForEntity(plan: WikiGenerationPlan, entity: { name: string; canonicalName?: string; type?: string }): WikiCategory {
+export interface ClassificationCandidate {
+  categoryId: string;
+  semanticRole: WikiCategoryRole;
+  confidence: number;
+  explicitIdentity: boolean;
+  identityEvidence?: string;
+  identityEvidenceVerified?: boolean;
+  alternatives?: string[];
+  semanticExplanation?: string;
+  decisionFactors?: string[];
+  counterEvidence?: string;
+  reason: string;
+  needsReview?: boolean;
+  source?: "llm" | "review";
+}
+
+type ClassifiableEntity = {
+  name: string;
+  canonicalName?: string;
+  type?: string;
+  summary?: string;
+  properties?: Record<string, string | number>;
+};
+
+const categoryByRole = (plan: WikiGenerationPlan, role: WikiCategoryRole) =>
+  plan.categories.find(category => category.role === role);
+
+function contentFallbackRole(entity: ClassifiableEntity): WikiCategoryRole {
   const name = entity.canonicalName ?? entity.name;
-  const forcedRole = roleFromName(name);
-  const exact = plan.categories.find(category =>
-    normalized(category.id) === normalized(entity.type ?? "") || normalized(category.label) === normalized(entity.type ?? ""));
-  const inferredRole = forcedRole ?? exact?.role ?? roleFromType(entity.type) ?? "concept";
-  return plan.categories.find(category => category.role === inferredRole)
-    ?? plan.categories.find(category => category.role === "concept")
+  const context = [name, entity.summary, ...Object.keys(entity.properties ?? {}), ...Object.values(entity.properties ?? {}).map(String)].filter(Boolean).join(" ");
+  if (FORMULA_SIGNAL.test(context)) return "formula";
+  const providerRole = roleFromType(entity.type);
+  if (providerRole && !NAMED_IDENTITY_ROLES.has(providerRole)) return providerRole;
+  return "concept";
+}
+
+function safeFallbackRole(entity: ClassifiableEntity): WikiCategoryRole {
+  return roleFromName(entity.canonicalName ?? entity.name) ?? contentFallbackRole(entity);
+}
+
+/**
+ * Resolves an AI classification as an auditable proposal rather than ground truth. Named laws,
+ * theorems and theories need positive identity evidence; a mathematical relationship alone can
+ * therefore never be promoted to a law merely because an extraction model proposed that label.
+ */
+export function resolveEntityClassification(
+  plan: WikiGenerationPlan,
+  entity: ClassifiableEntity,
+  candidate?: ClassificationCandidate,
+): { category: WikiCategory; decision: WikiClassificationDecision } {
+  const name = entity.canonicalName ?? entity.name;
+  const message = (en: string, zh: string) => plan.outputLanguage === "zh" ? zh : en;
+  const explicitRole = roleFromName(name);
+  const fallbackRole = safeFallbackRole(entity);
+  const fallbackCategory = categoryByRole(plan, fallbackRole)
+    ?? categoryByRole(plan, "concept")
     ?? plan.categories[0];
+
+  if (!candidate) {
+    const category = explicitRole ? categoryByRole(plan, explicitRole) ?? fallbackCategory : fallbackCategory;
+    const proposedTypeRole = roleFromType(entity.type);
+    const safelyCorrected = !explicitRole && Boolean(proposedTypeRole && proposedTypeRole !== category.role);
+    return {
+      category,
+      decision: {
+        semanticRole: category.role, categoryId: category.id, confidence: explicitRole ? .55 : .45,
+        status: safelyCorrected ? "corrected" : "needs_review", source: explicitRole ? "lexical" : "fallback",
+        reason: safelyCorrected
+          ? message("An unsafe provider type conflicted with the entity's structured content and was conservatively corrected.", "提取阶段给出的类别与结构化内容冲突，已进行保守纠正。")
+          : message(
+            "This is a provisional surface-level classification; source-context understanding is required before acceptance.",
+            "当前仅为表层信号产生的临时分类，必须结合原文语境完成语义判断后才能确认。",
+          ),
+      },
+    };
+  }
+
+  const proposedCategory = plan.categories.find(category => normalized(category.id) === normalized(candidate.categoryId));
+  const proposedRole = proposedCategory?.role ?? candidate.semanticRole;
+  const positiveNamedIdentity = !NAMED_IDENTITY_ROLES.has(proposedRole)
+    || Boolean(candidate.explicitIdentity && candidate.identityEvidenceVerified);
+  const relationContradiction = RELATION_LIKE_NAME.test(name) && NAMED_IDENTITY_ROLES.has(proposedRole) && !positiveNamedIdentity;
+  const invalidNamedIdentity = NAMED_IDENTITY_ROLES.has(proposedRole) && !positiveNamedIdentity;
+  const lowConfidence = candidate.confidence < .72 || Boolean(candidate.needsReview);
+  const nameConflict = Boolean(explicitRole && explicitRole !== proposedRole);
+
+  if (!proposedCategory || relationContradiction || invalidNamedIdentity) {
+    const semanticFallbackRole = contentFallbackRole(entity);
+    const semanticFallbackCategory = categoryByRole(plan, semanticFallbackRole)
+      ?? categoryByRole(plan, "concept")
+      ?? plan.categories[0];
+    const needsReview = invalidNamedIdentity && semanticFallbackRole === "concept";
+    return {
+      category: semanticFallbackCategory,
+      decision: {
+        semanticRole: semanticFallbackCategory.role, categoryId: semanticFallbackCategory.id,
+        confidence: candidate.confidence,
+        status: needsReview ? "needs_review" : "corrected", source: "fallback",
+        reason: relationContradiction
+          ? message("A relationship or rate-of-change statement is not a named law without verified identity evidence.", "关系或变化率陈述在缺少可验证的命名证据时不能归为定律。")
+          : invalidNamedIdentity
+            ? message(`The proposed ${proposedRole} identity was not supported by a verifiable source excerpt.`, `原文摘录不足以证明候选项属于“${proposedCategory?.label ?? proposedRole}”。`)
+            : message("The proposed category is outside the controlled plan; a safe semantic fallback was used.", "候选类别不在受控方案中，已使用安全的语义回退类别。"),
+        semanticExplanation: candidate.semanticExplanation, decisionFactors: candidate.decisionFactors,
+        identityEvidence: candidate.identityEvidence, proposedCategoryId: candidate.categoryId,
+        alternatives: candidate.alternatives,
+      },
+    };
+  }
+
+  const category = proposedCategory;
+  const unresolvedNameConflict = nameConflict && candidate.source !== "review";
+  return {
+    category,
+    decision: {
+      semanticRole: category.role, categoryId: category.id,
+      confidence: candidate.confidence,
+      status: lowConfidence || unresolvedNameConflict ? "needs_review" : "accepted",
+      source: candidate.source ?? "llm",
+      reason: unresolvedNameConflict
+        ? message("The name suggests another category, so the semantic conclusion requires independent review.", "名称表层含义与语义判断不一致，需要独立复核后才能确认。")
+        : candidate.reason,
+      semanticExplanation: candidate.semanticExplanation, decisionFactors: candidate.decisionFactors,
+      identityEvidence: candidate.identityEvidence, proposedCategoryId: candidate.categoryId,
+      alternatives: candidate.alternatives,
+    },
+  };
+}
+
+export function categoryForEntity(plan: WikiGenerationPlan, entity: ClassifiableEntity): WikiCategory {
+  return resolveEntityClassification(plan, entity).category;
 }
 
 export function ensurePlanCategoriesForEntities(
@@ -188,7 +376,8 @@ export function ensurePlanCategoriesForEntities(
 ): void {
   const roles = unique(entities.flatMap(entity => {
     const name = entity.canonicalName ?? entity.name;
-    return [roleFromName(name) ?? roleFromType(entity.type)].filter((role): role is WikiCategoryRole => Boolean(role));
+    const role = roleFromName(name) ?? safeFallbackRole(entity);
+    return [role].filter((value): value is WikiCategoryRole => Boolean(value));
   }));
   for (const role of roles) {
     if (plan.categories.some(category => category.role === role)) continue;
@@ -202,23 +391,47 @@ export function ensurePlanCategoriesForEntities(
 }
 
 /** Converts provider-written free-form types into labels from the validated project plan. */
-export function applyPlannedEntityTypes<T extends { name: string; canonicalName?: string; type?: string }>(plan: WikiGenerationPlan, entities: T[]): T[] {
+export function applyPlannedEntityTypes<T extends ClassifiableEntity & { classificationCandidate?: ClassificationCandidate }>(
+  plan: WikiGenerationPlan,
+  entities: T[],
+): Array<T & { classification: WikiClassificationDecision }> {
   ensurePlanCategoriesForEntities(plan, entities);
-  return entities.map(entity => ({ ...entity, type: categoryForEntity(plan, entity).label }));
+  return entities.map(entity => {
+    const resolved = resolveEntityClassification(plan, entity, entity.classificationCandidate);
+    return { ...entity, type: resolved.category.label, classification: resolved.decision };
+  });
 }
 
 export function applyPlanToWikiNodes(plan: WikiGenerationPlan, nodes: WikiNode[]): void {
   ensurePlanCategoriesForEntities(plan, nodes.map(node => ({ name: node.displayName, canonicalName: node.canonicalName, type: node.type })));
-  for (const node of nodes) node.type = categoryForEntity(plan, { name: node.displayName, canonicalName: node.canonicalName, type: node.type }).label;
+  for (const node of nodes) {
+    const prior = node.classification;
+    const priorCandidate: ClassificationCandidate | undefined = prior ? {
+      categoryId: prior.categoryId, semanticRole: prior.semanticRole, confidence: prior.confidence,
+      explicitIdentity: Boolean(prior.identityEvidence), identityEvidence: prior.identityEvidence,
+      identityEvidenceVerified: Boolean(prior.identityEvidence), alternatives: prior.alternatives,
+      semanticExplanation: prior.semanticExplanation, decisionFactors: prior.decisionFactors,
+      reason: prior.reason, needsReview: prior.status === "needs_review",
+      source: prior.source === "review" ? "review" : "llm",
+    } : undefined;
+    const resolved = resolveEntityClassification(plan, {
+      name: node.displayName, canonicalName: node.canonicalName, type: node.type,
+      summary: node.summary, properties: node.properties,
+    }, priorCandidate);
+    node.type = resolved.category.label;
+    node.classification = resolved.decision;
+  }
 }
 
 export function fallbackGenerationPlan(profile: WikiProfile, blocks: DocumentBlock[]): WikiGenerationPlan {
   const language = profile.outputLanguage ?? "en";
   return normalizeGenerationPlan({
-    version: "1.0", outputLanguage: language, researchGoal: profile.researchGoal,
+    version: "2.0", outputLanguage: language, researchGoal: profile.researchGoal,
     corpusSummary: language === "zh" ? "基于当前文档与研究目标生成的保守分类计划。" : "A conservative plan based on the current documents and research goal.",
     themes: [], requiredKnowledge: profile.importantFields, categories: [],
-    relationTypes: profile.preferredRelations, classificationRules: [],
+    relationTypes: fallbackRelationTypes(profile, language), classificationRules: [],
+    detectedPreset: profile.preset ?? "auto", unitOfAnalysis: profile.unitOfAnalysis ?? "", targetQuestions: profile.targetQuestions ?? [],
+    fieldRules: [], relationRules: [], qualityPolicy: qualityPolicy(profile),
     analyzedDocumentIds: unique(blocks.map(block => block.documentId)), createdAt: new Date().toISOString(),
   }, profile);
 }

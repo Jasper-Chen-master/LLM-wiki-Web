@@ -13,7 +13,11 @@ export class Store {
     try {
       const parsed = JSON.parse(await fs.readFile(this.file, "utf8")) as Partial<PersistedState>;
       this.state = { ...empty(), ...parsed, chatThreads: parsed.chatThreads ?? [], chatMessages: parsed.chatMessages ?? [] };
-      for (const project of this.state.projects) project.wikiRevision ??= 0;
+      for (const project of this.state.projects) {
+        project.wikiRevision ??= 0;
+        // Backward-compatible migration for workspaces saved before edit tracking.
+        project.updatedAt ??= project.createdAt;
+      }
     } catch { this.state = empty(); }
   }
   get data() { return this.state; }
