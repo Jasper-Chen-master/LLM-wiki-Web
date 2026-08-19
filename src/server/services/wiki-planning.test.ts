@@ -167,7 +167,7 @@ describe("Wiki generation planning", () => {
     expect(entity.classification.semanticRole).toBe("formula");
   });
 
-  it("keeps user-requested types and rejects corpus entities as top-level categories", () => {
+  it("uses exactly the user-requested types as categories and ignores AI-proposed categories", () => {
     const generated = normalizeGenerationPlan({
       ...plan("zh"),
       categories: [
@@ -179,8 +179,10 @@ describe("Wiki generation planning", () => {
       ],
       relationTypes: [], requiredKnowledge: [],
     }, academicProfile);
+    // Categories are now strictly user-authoritative: the AI-proposed "定律" category is
+    // dropped instead of being added alongside the user's declared types.
     expect(generated.categories.map(category => category.label)).toEqual([
-      "概念", "方法", "理论", "实验", "指标", "公式", "定律",
+      "概念", "方法", "理论", "实验", "指标", "公式",
     ]);
     expect(generated.relationTypes).toEqual(academicProfile.preferredRelations);
     expect(generated.requiredKnowledge).toEqual(academicProfile.importantFields);

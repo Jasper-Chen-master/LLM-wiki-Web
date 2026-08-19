@@ -127,7 +127,6 @@ const copy = {
     graphEmpty:
       "Your knowledge graph will appear after the research blueprint is confirmed and the evidence sources are processed.",
     clickNode: "Select a node to inspect its meaning, relationships, and evidence",
-    properties: "Structured knowledge",
     noProperties: "No structured details available.",
     related: "Connected knowledge",
     selectNode: "Select a node to open its Wiki detail.",
@@ -271,7 +270,6 @@ const copy = {
     graphEmpty:
       "确认研究蓝图并处理证据来源后，知识图谱将在这里生成。",
     clickNode: "选择节点，查看定义、关系与证据出处",
-    properties: "结构化知识",
     noProperties: "暂无可展示的结构化信息。",
     related: "关联知识",
     selectNode: "选择一个节点，打开它的 Wiki 详情。",
@@ -1310,19 +1308,6 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                     </ul>
                   </>
                 ) : null}
-                <h3>{t.properties}</h3>
-                {Object.keys(selected.properties).length ? (
-                  <dl>
-                    {Object.entries(selected.properties).map(([key, value]) => (
-                      <div key={key}>
-                        <dt>{key}</dt>
-                        <dd>{renderStructuredValue(String(value))}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="muted">{t.noProperties}</p>
-                )}
                 <h3>{t.related}</h3>
                 {related.length ? (
                   <div className="related-list">
@@ -1614,24 +1599,6 @@ function toWikiLatex(formula: string) {
     .replace(/√/g, "\\sqrt ");
 }
 
-function renderStructuredValue(content: string) {
-  const mathSignal = content.search(/[=<>≈≤≥≠∝∑∫√αβγΔθλμπρτφω]/u);
-  if (mathSignal < 0) return content;
-  const prefixEnd = Math.max(
-    content.lastIndexOf("，", mathSignal),
-    content.lastIndexOf("：", mathSignal),
-    content.lastIndexOf("；", mathSignal),
-  );
-  const prefix = prefixEnd >= 0 ? content.slice(0, prefixEnd + 1) : "";
-  const candidate = content.slice(prefixEnd + 1).trim();
-  if (!candidate || /[\p{Script=Han}]/u.test(candidate)) return content;
-  const html = katex.renderToString(toWikiLatex(candidate), {
-    throwOnError: false,
-    trust: false,
-    strict: "ignore",
-  });
-  return <>{prefix}<span className="structured-math" dangerouslySetInnerHTML={{ __html: html }} /></>;
-}
 function ChatClaimStatuses({ claims }: { claims: ChatClaim[] }) {
   const { t } = useI18n();
   const counts = claims.reduce<Record<string, number>>((current, claim) => ({ ...current, [claim.status]: (current[claim.status] ?? 0) + 1 }), {});

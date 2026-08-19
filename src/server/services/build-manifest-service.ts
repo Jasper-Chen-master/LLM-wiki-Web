@@ -8,17 +8,17 @@ import {
   ensureDocumentFingerprint,
 } from "../document-parser.js";
 
-export const WIKI_SCHEMA_VERSION = "document-analysis-v1+wiki-generation-plan-v2+evidence-claim-ledger-v1+candidate-catalog-v1+semantic-registry-v1";
+export const WIKI_SCHEMA_VERSION = "document-analysis-v1+wiki-generation-plan-v3+evidence-claim-ledger-v2+candidate-catalog-v1+semantic-registry-v2";
 export const WIKI_PROMPT_VERSIONS = {
   profile: "preference-parser-v2",
   documentAnalysis: "document-analysis-v1",
   documentSynthesis: "document-synthesis-v1",
-  generationPlan: "generation-plan-v4",
+  generationPlan: "generation-plan-v5",
   relevance: "relevance-v2",
-  claimExtraction: "evidence-claim-extraction-v1",
+  claimExtraction: "evidence-claim-extraction-v2",
   candidateCatalog: "candidate-catalog-v1",
   semanticConsolidation: "semantic-consolidation-v1",
-  wikiSummarization: "wiki-summarization-v1",
+  wikiSummarization: "wiki-summarization-v2",
 };
 
 function canonicalize(value: unknown): unknown {

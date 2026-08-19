@@ -155,30 +155,12 @@ function profileCategories(profile: WikiProfile, language: "en" | "zh"): WikiCat
 
 /** Keeps user-declared ontology classes authoritative and collapses AI topics into broad roles. */
 export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: WikiProfile): WikiGenerationPlan {
-  const categories: WikiCategory[] = profile ? profileCategories(profile, plan.outputLanguage) : [];
-  const seenIds = new Set<string>();
-  const seenLabels = new Set<string>();
-  for (const category of categories) {
-    seenIds.add(normalized(category.id));
-    seenLabels.add(normalized(category.label));
-  }
-  for (const category of plan.categories) {
-    const idKey = normalized(category.id);
-    const labelKey = normalized(category.label);
-    if (!idKey || seenIds.has(idKey) || seenLabels.has(labelKey)) continue;
-    // In auto/custom mode the corpus may define reusable domain classes represented by the
-    // generic `other` role (company, clause, component, claim, sample...). User-provided types
-    // remain authoritative when present; semantic built-ins are still deduplicated by role.
-    if (category.role !== "other" && categories.some(existing => existing.role === category.role)) continue;
-    const broadCategory = category.role === "other" ? category : requiredCategory(plan.outputLanguage, category.role);
-    categories.push({
-      ...broadCategory,
-      inclusionExamples: category.inclusionExamples,
-      exclusionExamples: category.exclusionExamples,
-    });
-    seenIds.add(normalized(broadCategory.id));
-    seenLabels.add(normalized(broadCategory.label));
-  }
+  // Categories are strictly user-authoritative: they come only from the profile's declared
+  // knowledge types (entityTypes, the "需要保留的知识类型" field). The AI does NOT invent
+  // categories; it only classifies entities and constructs relations within these categories.
+  // When the user left that list empty (auto mode), fall back to the AI-planned categories.
+  const declaredCategories = profile ? profileCategories(profile, plan.outputLanguage) : [];
+  const categories: WikiCategory[] = (declaredCategories.length ? declaredCategories : plan.categories ?? []).slice(0, 16);
   if (!categories.length) {
     categories.push(requiredCategory(plan.outputLanguage, "concept"));
   }

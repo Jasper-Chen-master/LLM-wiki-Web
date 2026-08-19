@@ -88,12 +88,32 @@ const analysisEntitySchema = z.object({
   aliases: z.array(z.string().trim().min(1).max(200)).max(20).default([]),
   evidenceBlockIds: z.array(z.string().min(1)).max(32).default([]),
 });
+// Fast/cheap LLM models frequently return semantic strings ("high"/"medium"/"low",
+// or Chinese equivalents) for importance/confidence, and null for optional records,
+// instead of the numeric/object shapes the schema requires. Coerce these leniently so a
+// single mistyped field does not fail the entire slice (which would silently mark every
+// block in that slice unresolved and drop its content from the document analysis).
+const clampScore = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0.5));
+const coerceScore = (value: unknown): unknown => {
+  if (typeof value === "number") return clampScore(value);
+  if (typeof value === "string") {
+    const numeric = Number(value.trim());
+    if (Number.isFinite(numeric)) return clampScore(numeric);
+    const lower = value.trim().toLowerCase();
+    if (["high", "very high", "高", "很高", "重要", "关键", "强"].includes(lower)) return 0.9;
+    if (["medium", "moderate", "中", "中等", "一般"].includes(lower)) return 0.6;
+    if (["low", "低", "次要", "弱"].includes(lower)) return 0.3;
+    return 0.5;
+  }
+  return value;
+};
+const semanticScoreSchema = z.preprocess(coerceScore, z.number().min(0).max(1));
 const analysisPointSchema = z.object({
   kind: z.enum(["definition", "concept", "entity", "method", "finding", "relationship", "contradiction", "other"]),
   title: z.string().trim().min(1).max(200), statement: z.string().trim().min(1).max(1_500),
-  status: z.enum(["observed", "reported", "inferred"]), scope: z.string().trim().max(500).optional(),
-  conditions: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
-  importance: z.number().min(0).max(1), confidence: z.number().min(0).max(1),
+  status: z.enum(["observed", "reported", "inferred"]), scope: z.preprocess(value => value == null ? undefined : value, z.string().trim().max(500).optional()),
+  conditions: z.preprocess(value => value == null ? {} : value, z.record(z.string(), z.union([z.string(), z.number()]))),
+  importance: semanticScoreSchema, confidence: semanticScoreSchema,
   evidenceBlockIds: z.array(z.string().min(1)).max(32).default([]),
 });
 const analysisTopicSchema = z.object({
@@ -254,7 +274,6 @@ const pipelineConcurrency = (profile: WikiProfile) => profile.costPreference ===
 const stageBudget = (profile: WikiProfile, stage: "relevance" | "extraction") => {
   const mode = profile.costPreference ?? "balanced";
   if (stage === "relevance") return mode === "economy" ? { maxChars: 28_000, maxItems: 64, itemChars: 1_400 } : mode === "quality" ? { maxChars: 14_000, maxItems: 28, itemChars: 2_200 } : { maxChars: 20_000, maxItems: 48, itemChars: 1_600 };
-  if (stage === "extraction") return mode === "economy" ? { maxChars: 24_000, maxItems: 40, itemChars: 1_400 } : mode === "quality" ? { maxChars: 12_000, maxItems: 18, itemChars: 2_400 } : { maxChars: 18_000, maxItems: 28, itemChars: 1_600 };
   return mode === "economy" ? { maxChars: 24_000, maxItems: 40, itemChars: 1_400 } : mode === "quality" ? { maxChars: 12_000, maxItems: 18, itemChars: 2_400 } : { maxChars: 18_000, maxItems: 28, itemChars: 1_600 };
 };
 

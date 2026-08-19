@@ -49,8 +49,9 @@ Return exactly one analysis object containing:
 - summary, relevance (direct/partial/contextual/out_of_scope), relevanceReason, sourceBoundary, themes;
 - entities with name, optional type, aliases, and exact evidenceBlockIds;
 - atomic knowledgePoints with kind (definition/concept/entity/method/finding/relationship/contradiction/other),
-  title, statement, status (observed/reported/inferred), optional scope and conditions, importance,
-  confidence, and exact evidenceBlockIds;
+  title, statement, status (observed/reported/inferred), optional scope, conditions (a JSON object of
+  string/number values; use {} when none), importance and confidence (each a NUMBER between 0 and 1,
+  e.g. 0.9 for high, 0.6 for medium, 0.3 for low), and exact evidenceBlockIds;
 - suggestedWikiTopics with title, reason, and exact evidenceBlockIds. These are design suggestions,
   not source facts and must never be silently written as claims;
 - existingConceptLinks only when one supplied registry entry is genuinely supported by this slice;
@@ -124,16 +125,21 @@ Return corpusSummary, themes, requiredKnowledge, categories, relationTypes, clas
 detectedPreset, unitOfAnalysis, targetQuestions, fieldRules, relationRules, qualityPolicy, and
 candidateExtractionContract.
 If preset is auto, detect the most suitable mode. If preset is custom, customRequirements are authoritative.
-Profile lists are priorities, not closed whitelists, unless customRequirements explicitly says to
-limit output. An empty entityTypes, importantFields, preferredRelations, or targetQuestions list
-means that dimension is open for AI planning. Infer the minimal sufficient result from the research
-goal and corpus. When preferredRelations is empty, relationTypes and relationRules MUST still
-contain the evidence-supported semantic relations needed to explain the material; never return an
-empty relation plan solely because the user left that field blank.
+entityTypes is a CLOSED whitelist: the categories you return MUST equal the user's declared knowledge
+types exactly — do not add, rename, merge, or invent any category. Your role is not to design an
+ontology (the user already fixed it) but to (1) read and understand the corpus, (2) extract the themes
+and required knowledge that the fixed categories should cover, and (3) specify the evidence-supported
+relation types that connect entities within those categories.
+importantFields and preferredRelations are priorities: when non-empty they are authoritative input;
+when empty, infer the minimal sufficient result from the research goal and corpus. When
+preferredRelations is empty, relationTypes and relationRules MUST still contain the evidence-supported
+semantic relations needed to explain the material; never return an empty relation plan.
 The plan must work for the actual task. Academic-paper mode needs study-scoped questions, methods, findings, limitations, and conflicts; course-learning mode needs concepts, formulas, derivations, examples, and prerequisites; smart auto-detect must select these only when supported by the task and corpus. Do not force an academic-paper or course-learning ontology onto another mode.
 For each category return: id (short stable ASCII identifier), label, role, definition, inclusionExamples, exclusionExamples.
-Every item in USER OBJECTIVE.entityTypes MUST appear as a top-level category with the same human-readable label. These user-declared categories have higher priority than corpus-derived suggestions.
-You may add a category only when it is a broad, reusable semantic class needed by multiple entities and genuinely missing from the user types. Never promote a theme, chapter title, individual concept, named equation, method name, material, or other entity into a category.
+The categories MUST be exactly the items in USER OBJECTIVE.entityTypes — one category per item, with
+the same human-readable label. Do NOT add any other category and do NOT rename or merge the user's
+types. Never promote a theme, chapter title, concept, named equation, method name, material, or other
+entity into a category. (The server re-validates categories against the user's list regardless.)
 Categories answer “what kind of knowledge is this?”, while themes and entities answer “what specific knowledge is this about?”.
 Bad category labels: “波”, “向心加速度”, “波动方程”, “量纲分析”. Correct treatment: these are entity names classified under broad labels such as “概念/指标/公式/方法”.
 Use the smallest sufficient set of broad categories. Categories must be mutually understandable and stable across different source documents.
@@ -221,7 +227,16 @@ Return exactly one JSON object with this shape:
       "reason": "why this claim matters or how it is supported"
     }
   ],
-  "relations": []
+  "relations": [
+    {
+      "source": "exact suggestedName of a claim in this batch",
+      "target": "exact suggestedName of another claim in this batch",
+      "relationType": "one controlled relation label (定义/推导/应用于/导致/依赖/举例 …)",
+      "confidence": 0.7,
+      "evidenceIds": ["block id(s) that directly show this connection"],
+      "relationStatus": "observed | reported | inferred"
+    }
+  ]
 }
 
 For each claim return blockId, disposition, kind, statement, suggestedName, suggestedType,
@@ -239,9 +254,13 @@ aliases, properties, optional scope, importance, confidence, and reason.
 - facts, examples, scope, and conditions that cannot safely be unified must stay as separate
   claims, even when they mention the same topic.
 
-Relations are optional. A relation must use exact suggestedName values from claims in this batch,
-have direct evidenceIds, and satisfy the frozen relation rules. Do not create a relation from
-co-occurrence.
+Relations are REQUIRED, not optional. After listing the claims, identify every evidence-supported
+semantic relation between them and return one relation per meaningful connection. Each relation MUST
+use exact suggestedName values from the claims in this batch, a relationType that is one of the frozen
+relation labels, direct evidenceIds, and a relationStatus. Connect two claims only when the source
+text explicitly shows that connection (definition, derivation, application, dependency, cause,
+example, contrast, …). Do not invent relations from mere co-occurrence, but also do not skip a real,
+evidence-backed connection just to keep the list short.
 
 RESEARCH PROFILE
 ${JSON.stringify({
@@ -315,14 +334,20 @@ export const wikiSummarizationPrompt = (
   plan: WikiGenerationPlan,
   entries: Array<Record<string, unknown>>,
 ) => `
-Write one concise, stable summary for every supplied Concept Registry entry. A summary is generated
-only after claim cataloging and semantic consolidation, so describe the canonical concept while
-retaining important scope, conditions, and limits represented by its semantic members.
+Write a detailed, reader-friendly explanation for every supplied Concept Registry entry. Each summary
+is generated only after claim cataloging and semantic consolidation, so you can describe the canonical
+concept fully while retaining important scope, conditions, and limits from its semantic members.
 
-Return summaries with registryEntryId, summary, confidence, and reason. Use only supported
-evidence. Do not add external knowledge, infer unsupported mechanisms, replace a scoped finding
-with a universal statement, or repeat a member list. Keep terminology consistent with the
-canonicalName and frozen ontology. If evidence is insufficient, say so plainly in the summary.
+For each entry write a self-contained explanation that:
+1. States what the concept is (its definition or core idea) in plain language.
+2. Explains how it works or why it matters, including key conditions, scope, or limits.
+3. Cites at least one concrete example from the supplied evidence, quoting or paraphrasing the source
+   so the reader can see the concept applied in the original document.
+
+Return summaries with registryEntryId, summary, confidence, and reason. Use only supported evidence.
+Do not add external knowledge, infer unsupported mechanisms, replace a scoped finding with a universal
+statement, or repeat a member list. Keep terminology consistent with the canonicalName and frozen
+ontology. If evidence is insufficient, say so plainly in the summary.
 
 RESEARCH PROFILE
 ${JSON.stringify({ researchGoal: profile.researchGoal, unitOfAnalysis: profile.unitOfAnalysis, targetQuestions: profile.targetQuestions })}

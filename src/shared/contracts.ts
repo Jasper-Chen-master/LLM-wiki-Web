@@ -230,7 +230,7 @@ export const CandidateCatalogOutputSchema = z.object({
 export type CandidateCatalogOutput = z.infer<typeof CandidateCatalogOutputSchema>;
 export const WikiSummaryOutputSchema = z.object({
   summaries: z.array(z.object({
-    registryEntryId: z.string().min(1), summary: z.string().trim().min(1).max(1_200),
+    registryEntryId: z.string().min(1), summary: z.string().trim().min(1).max(2_000),
     confidence: z.number().min(0).max(1), reason: z.string().trim().min(1).max(500),
   })).max(240).default([]),
 });
