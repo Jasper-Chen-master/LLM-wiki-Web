@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { randomUUID } from "node:crypto";
-import type { DocumentBlock, Evidence, WikiClassificationDecision, WikiEdge, WikiGenerationPlan, WikiNode } from "../../shared/contracts.js";
+import type { DocumentBlock, Evidence, WikiClassificationDecision, WikiEdge, WikiGenerationPlan, WikiNode, WikiSemanticMember } from "../../shared/contracts.js";
 import type { PersistedState } from "../store.js";
 
 /** A minimal extraction shape so providers can evolve without leaking into graph persistence. */
@@ -17,6 +16,9 @@ export interface ExtractedEntity {
   confidenceReason?: string;
   evidenceIds?: string[];
   classification?: WikiClassificationDecision;
+  registryEntryId?: string;
+  semanticMembers?: WikiSemanticMember[];
+  claimIds?: string[];
 }
 
 export interface ExtractedRelation {
@@ -113,7 +115,9 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
     }
     const candidate = { ...entity, canonicalName: name, evidenceIds: valid };
     const aliases = [name, ...(entity.aliases ?? [])].map(normalizeEntityName).filter(Boolean);
-    const matchingKey = [...groups.keys()].find(key => aliases.includes(key)) ?? normalized;
+    const matchingKey = entity.registryEntryId
+      ?? [...groups.keys()].find(key => aliases.includes(key))
+      ?? normalized;
     groups.set(matchingKey, [...(groups.get(matchingKey) ?? []), candidate]);
   }
 
@@ -134,8 +138,11 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
     const bestConfidence = scored.reduce((best, item) => item.confidence > best.confidence ? item : best);
     const classification = group.map(item => item.classification).filter((item): item is WikiClassificationDecision => Boolean(item))
       .sort((a, b) => b.confidence - a.confidence)[0];
+    const semanticMembers = [...new Map(group.flatMap(item => item.semanticMembers ?? [])
+      .map(member => [member.candidateId, member])).values()];
+    const registryEntryId = group.map(item => item.registryEntryId).find(Boolean);
     return {
-      id: idFor(projectId, "node", normalized),
+      id: registryEntryId ?? idFor(projectId, "node", normalized),
       canonicalName: primary.canonicalName ?? primary.name,
       displayName: primary.name,
       type: primary.type ?? "Concept",
@@ -144,7 +151,7 @@ export function deduplicateEntities(projectId: string, entities: ExtractedEntity
       properties,
       importance: bestImportance.importance, importanceReason: bestImportance.importanceReason,
       confidence: bestConfidence.confidence, confidenceReason: bestConfidence.confidenceReason,
-      evidenceIds, classification,
+      evidenceIds, classification, registryEntryId, semanticMembers,
     } satisfies WikiNode;
   });
   return { nodes, rejected };
@@ -216,7 +223,7 @@ export function buildEvidenceBoundGraph(input: GraphBuildInput): GraphBuildResul
  */
 export function buildGraph(projectId: string, extraction: unknown, blocks: DocumentBlock[], plan?: WikiGenerationPlan) {
   const evidence = blocks.map(block => ({
-    id: randomUUID(), documentId: block.documentId, page: block.page, section: block.section,
+    id: idFor(projectId, "evidence", `${block.id}|reported`), documentId: block.documentId, page: block.page, section: block.section,
     blockId: block.id, originalText: block.text, status: "reported" as const,
   }));
   const raw = extraction as { entities?: ExtractedEntity[]; nodes?: ExtractedEntity[]; relations?: ExtractedRelation[]; edges?: ExtractedRelation[] };
@@ -243,6 +250,7 @@ export function buildGraph(projectId: string, extraction: unknown, blocks: Docum
  */
 export function removeDocumentKnowledge(state: PersistedState, projectId: string, documentIds: Set<string>) {
   if (!documentIds.size) return;
+  const removedBlockIds = new Set(state.blocks.filter(block => documentIds.has(block.documentId)).map(block => block.id));
   const removedEvidenceIds = new Set(state.evidence.filter(item => documentIds.has(item.documentId)).map(item => item.id));
   state.blocks = state.blocks.filter(block => !documentIds.has(block.documentId));
   state.evidence = state.evidence.filter(item => !removedEvidenceIds.has(item.id));
@@ -261,6 +269,47 @@ export function removeDocumentKnowledge(state: PersistedState, projectId: string
   ).filter(edge => !isProjectEdge(edge) || (
     edge.evidenceIds.length > 0 && survivingNodeIds.has(edge.sourceNodeId) && survivingNodeIds.has(edge.targetNodeId)
   ));
+  state.knowledgeCandidates = state.knowledgeCandidates.map(candidate => candidate.projectId === projectId
+    ? {
+      ...candidate,
+      evidenceBlockIds: candidate.evidenceBlockIds.filter(id => !removedBlockIds.has(id)),
+      sourceDocumentIds: candidate.sourceDocumentIds.filter(id => !documentIds.has(id)),
+    }
+    : candidate,
+  ).filter(candidate => candidate.projectId !== projectId || candidate.evidenceBlockIds.length > 0);
+  const survivingCandidateIds = new Set(state.knowledgeCandidates
+    .filter(candidate => candidate.projectId === projectId)
+    .map(candidate => candidate.id));
+  state.conceptRegistry = state.conceptRegistry.map(entry => {
+    if (entry.projectId !== projectId) return entry;
+    const evidenceBlockIds = entry.evidenceBlockIds.filter(id => !removedBlockIds.has(id));
+    return {
+      ...entry,
+      evidenceBlockIds,
+      memberCandidateIds: entry.memberCandidateIds.filter(id => survivingCandidateIds.has(id)),
+      semanticMembers: entry.semanticMembers.filter(member => survivingCandidateIds.has(member.candidateId)),
+      status: evidenceBlockIds.length ? entry.status : "orphaned" as const,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  state.evidenceClaims = state.evidenceClaims.filter(claim => (
+    claim.projectId !== projectId || !removedBlockIds.has(claim.blockId)
+  ));
+  const survivingClaimIds = new Set(state.evidenceClaims
+    .filter(claim => claim.projectId === projectId)
+    .map(claim => claim.id));
+  state.evidenceClaimCoverage = state.evidenceClaimCoverage.filter(coverage => (
+    coverage.projectId !== projectId || !removedBlockIds.has(coverage.blockId)
+  ));
+  state.conceptRegistry = state.conceptRegistry.map(entry => entry.projectId !== projectId ? entry : {
+    ...entry,
+    claimIds: entry.claimIds?.filter(id => survivingClaimIds.has(id)),
+  });
+  for (const proposal of state.ontologyExtensionProposals) {
+    if (proposal.projectId !== projectId || proposal.status !== "pending") continue;
+    proposal.sourceDocumentIds = proposal.sourceDocumentIds.filter(id => !documentIds.has(id));
+    if (!proposal.sourceDocumentIds.length) proposal.status = "superseded";
+  }
 }
 
 /** Clears one project's derived graph while retaining parsed document blocks for an efficient
@@ -276,11 +325,19 @@ export function clearProjectGraphKnowledge(state: PersistedState, projectId: str
   state.edges = state.edges.filter(edge => !projectEdgeIds.has(edge.id));
   const survivingEvidenceIds = new Set([...state.nodes, ...state.edges].flatMap(item => item.evidenceIds));
   state.evidence = state.evidence.filter(item => !candidateEvidenceIds.has(item.id) || survivingEvidenceIds.has(item.id));
+  state.knowledgeCandidates = state.knowledgeCandidates.filter(candidate => candidate.projectId !== projectId);
+  state.evidenceClaims = state.evidenceClaims.filter(claim => claim.projectId !== projectId);
+  state.evidenceClaimCoverage = state.evidenceClaimCoverage.filter(coverage => coverage.projectId !== projectId);
 }
 
 /** Merges an incrementally-built graph while preserving stable node and edge identifiers. */
 export function mergeGraphInto(state: PersistedState, projectId: string, graph: Pick<GraphBuildResult, "nodes" | "edges"> & { evidence: Evidence[] }) {
-  state.evidence.push(...graph.evidence);
+  const evidenceById = new Map(state.evidence.map((item, index) => [item.id, index]));
+  for (const item of graph.evidence) {
+    const existingIndex = evidenceById.get(item.id);
+    if (existingIndex === undefined) evidenceById.set(item.id, state.evidence.push(item) - 1);
+    else state.evidence[existingIndex] = item;
+  }
   const nodeById = new Map(state.nodes.map((node, index) => [node.id, index]));
   for (const node of graph.nodes) {
     const existingIndex = nodeById.get(node.id);
@@ -299,6 +356,9 @@ export function mergeGraphInto(state: PersistedState, projectId: string, graph: 
       importanceReason: incomingHasHigherImportance ? node.importanceReason : existing.importanceReason,
       classification: !existing.classification || (node.classification?.confidence ?? 0) > existing.classification.confidence
         ? node.classification : existing.classification,
+      registryEntryId: node.registryEntryId ?? existing.registryEntryId,
+      semanticMembers: [...new Map([...(existing.semanticMembers ?? []), ...(node.semanticMembers ?? [])]
+        .map(member => [member.candidateId, member])).values()],
     };
   }
   const edgeById = new Map(state.edges.map((edge, index) => [edge.id, index]));

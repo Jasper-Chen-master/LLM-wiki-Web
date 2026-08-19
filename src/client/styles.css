@@ -151,7 +151,7 @@ select:focus-visible {
 .overview-grid { display: grid; grid-template-columns: minmax(520px, 1.55fr) minmax(320px, 0.8fr); gap: 14px; }
 .right-stack { display: grid; align-content: start; gap: 14px; }
 .panel { padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025); }
-.panel-heading { display: flex; justify-content: space-between; gap: 14px; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .help, .job-panel p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .field { display: block; margin-top: 16px; }
 .field > span { display: block; margin-bottom: 7px; color: #424245; font-size: 11px; font-weight: 650; }
@@ -185,7 +185,7 @@ select:focus-visible {
 .document small { margin-top: 2px; color: var(--text-tertiary); }
 .document-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; padding-top: 12px; color: var(--text-secondary); border-top: 1px solid var(--border); font-size: 11px; }
 .selection-help { margin: 8px 0 0 !important; color: var(--text-tertiary) !important; font-size: 10px !important; }
-.status { padding: 4px 7px; border-radius: 8px; font-size: 9px; font-weight: 650; text-transform: uppercase; white-space: nowrap; }
+.status { display: inline-flex; align-items: center; align-self: flex-start; width: fit-content; padding: 4px 7px; border-radius: 8px; font-size: 9px; font-weight: 650; line-height: 1.2; text-transform: uppercase; white-space: nowrap; }
 .status.good { color: var(--green); background: var(--green-soft); }
 .status.pending { color: var(--amber); background: var(--amber-soft); }
 .job-head { display: flex; align-items: center; justify-content: space-between; }
@@ -234,6 +234,10 @@ select:focus-visible {
 .evidence p { margin: 7px 0 !important; color: #424245 !important; font-size: 11px !important; line-height: 1.5 !important; }
 .evidence mark { padding: 0 1px; color: inherit; background: #ffe788; border-radius: 2px; }
 .chips, .related-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.semantic-members { display: grid; gap: 0.65rem; margin: 0; padding: 0; list-style: none; }
+.semantic-members li { padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); }
+.semantic-members .type-pill, .semantic-members small { margin-left: 0.45rem; }
+.semantic-members p { margin: 0.35rem 0 0; }
 .chips small { display: block; color: var(--accent); font-size: 8px; }
 .graph-empty { display: grid; min-height: 400px; place-items: center; text-align: center; }
 

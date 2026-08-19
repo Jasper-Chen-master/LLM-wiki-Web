@@ -106,8 +106,8 @@ Separate the following carefully:
 - exclude: topics or information that should stay outside the main Wiki;
 - notes: constraints that do not fit another field;
 - outputLanguage: "zh" when the user requests Chinese output, otherwise "en".
-- preset: choose auto, course, research, literature_review, experimental, prediction, business,
-  policy, technical, personal, general, or custom; use custom when the profile defines a distinctive workflow;
+- preset: choose auto, research, course, or custom. Use auto when the source type should be inferred;
+  use custom when the profile defines its own workflow, ontology, or output constraints;
 - customRequirements: preserve detailed user-specific instructions that must shape the generated Wiki;
 - targetQuestions: concrete questions the finished Wiki must be able to answer;
 - unitOfAnalysis: the indivisible record or knowledge unit (concept, claim, paper, sample, test condition, clause, component, etc.);

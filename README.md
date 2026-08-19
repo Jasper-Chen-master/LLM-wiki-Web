@@ -13,7 +13,7 @@ Open `http://localhost:5173`. The API runs on `http://localhost:3001`. Copy `.en
 
 ## Workflow
 
-Create a project → upload DOCX Research Profile and PDF/DOCX source files → review/edit the generated profile → confirm → analyze the goal against the corpus → plan controlled Wiki categories → filter and extract evidence-backed knowledge → explore graph, Wiki detail, search, chat, and JSON/CSV export.
+Create a project → upload DOCX Research Profile and PDF/DOCX source files → review/edit the generated profile → confirm → deterministically parse and fingerprint sources → analyze every document in ordered, context-carrying slices → persist a validated document-level knowledge analysis with complete block coverage → freeze a controlled ontology and Candidate Extraction Contract → record a coverage-complete Evidence Claim ledger → let AI create a global Candidate Catalog → consolidate candidates into a persistent Concept Registry → generate stable summaries from canonical evidence → validate and publish evidence-bound graph knowledge → explore graph, Wiki detail, search, chat, and JSON/CSV export. New documents use the frozen ontology and record extension proposals instead of silently replacing it.
 
 ## Limitations
 

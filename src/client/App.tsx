@@ -101,6 +101,7 @@ const copy = {
     customRequirements: "Custom generation requirements",
     customRequirementsHint: "Describe any custom ontology, fields, relation logic, priorities, or output constraints.",
     classificationDecision: "Classification decision",
+    semanticMembers: "Consolidated semantic members",
     save: "Save blueprint",
     confirm: "Confirm and build Wiki",
     rerun: "Rebuild from current sources",
@@ -116,7 +117,7 @@ const copy = {
     source: "Evidence source",
     processing: "Wiki build",
     processingHelp:
-      "Confirm the blueprint to parse sources, filter for relevance, extract knowledge, merge aliases, and bind every result to evidence.",
+      "Confirm the blueprint to parse sources, filter for relevance, extract candidates, consolidate semantic overlap with AI, and bind every result to evidence.",
     graphSub: "Explore how evidence-backed concepts, methods, findings, and relationships connect.",
     searchKnowledge: "Search this Wiki",
     find: "Focus a Wiki node…",
@@ -159,7 +160,7 @@ const copy = {
     jobAnalyzing: "Analyzing goal and corpus",
     jobPlanning: "Planning Wiki categories",
     jobFiltering: "Applying research focus",
-    jobExtracting: "Building structured knowledge",
+    jobExtracting: "Building evidence claims",
     jobResolving: "Merging duplicate concepts",
     jobBuildingGraph: "Linking the knowledge graph",
     jobCompleted: "Wiki ready",
@@ -169,16 +170,18 @@ const copy = {
     jobAnalyzingMessage: "Comparing the research objective with themes and knowledge found across the current sources.",
     jobPlanningMessage: "Creating a controlled classification plan before extracting Wiki entries.",
     jobFilteringMessage: "Keeping the material that supports your guiding research question.",
-    jobExtractingMessage: "Turning relevant evidence into concepts, properties, findings, and relationships.",
-    jobResolvingMessage: "Combining aliases and duplicate concepts into stable Wiki entries.",
+    jobExtractingMessage: "Recording atomic evidence claims before the AI creates a global candidate catalog.",
+    jobResolvingMessage: "Using AI semantic understanding to consolidate overlapping concepts into stable Wiki entries.",
     jobBuildingGraphMessage: "Connecting Wiki entries to relationships and page-level evidence.",
     jobCompletedMessage: "The evidence-linked Wiki is ready to explore, search, and question.",
     jobFailedMessage: "The build stopped before the Wiki was complete. Review the errors below.",
-    jobCorpusAnalysis: "Corpus analysis batches",
+    jobDocumentAnalysis: "Full-document analysis batches",
+    jobDocumentSynthesis: "Document synthesis batches",
     jobPlanGeneration: "Wiki structure generation",
     jobRelevance: "Relevance filtering batches",
-    jobExtraction: "Knowledge extraction batches",
-    jobClassification: "Entity classification batches",
+    jobClaimExtraction: "Evidence-claim ledger batches",
+    jobCandidateCatalog: "Global candidate catalog batches",
+    jobSummarization: "Wiki summary batches",
     jobElapsed: "elapsed",
     documentUploaded: "Awaiting processing",
     documentParsed: "Knowledge extracted",
@@ -242,6 +245,7 @@ const copy = {
     customRequirements: "自定义生成要求",
     customRequirementsHint: "描述自定义分类、字段、关系逻辑、优先级或输出约束。",
     classificationDecision: "分类决策",
+    semanticMembers: "语义归并成员",
     save: "保存研究蓝图",
     confirm: "确认并构建 Wiki",
     rerun: "按当前材料重新构建",
@@ -257,7 +261,7 @@ const copy = {
     source: "证据来源",
     processing: "Wiki 构建",
     processingHelp:
-      "确认研究蓝图后，系统将读取材料、筛选相关内容、提取结构化知识、合并重复概念，并为节点和关系绑定证据。",
+      "确认研究蓝图后，系统将读取材料、筛选相关内容、提取知识候选，并由 AI 理解语义重叠后为节点和关系绑定证据。",
     graphSub: "探索概念、方法、结论与证据之间的结构化联系。",
     searchKnowledge: "检索当前 Wiki",
     find: "定位 Wiki 节点…",
@@ -299,8 +303,8 @@ const copy = {
     jobAnalyzing: "正在联合分析目标与材料",
     jobPlanning: "正在规划 Wiki 分类",
     jobFiltering: "正在按研究目标筛选",
-    jobExtracting: "正在提取结构化知识",
-    jobResolving: "正在合并重复概念",
+    jobExtracting: "正在建立证据声明账本",
+    jobResolving: "正在进行 AI 语义归并",
     jobBuildingGraph: "正在连接知识图谱",
     jobCompleted: "Wiki 已就绪",
     jobFailed: "构建中断",
@@ -309,16 +313,18 @@ const copy = {
     jobAnalyzingMessage: "正在结合核心研究问题，分析当前材料中的主题、范围与必要知识。",
     jobPlanningMessage: "正在生成受控分类计划，明确每类知识的边界与归类规则。",
     jobFilteringMessage: "正在保留能够支撑核心研究问题的材料。",
-    jobExtractingMessage: "正在把相关证据整理为概念、属性、结论与关系。",
-    jobResolvingMessage: "正在合并别名与重复概念，形成稳定的 Wiki 条目。",
+    jobExtractingMessage: "正在逐区块记录原子证据声明，随后由 AI 建立全局 Candidate 目录。",
+    jobResolvingMessage: "AI 正在理解候选之间的等价、实例、侧面与特化关系，形成稳定的 Wiki 条目。",
     jobBuildingGraphMessage: "正在连接 Wiki 条目、知识关系与页级证据。",
     jobCompletedMessage: "证据可追溯的 Wiki 已经可以探索、检索与问答。",
     jobFailedMessage: "Wiki 尚未构建完成，请查看下方错误信息。",
-    jobCorpusAnalysis: "语料分析批次",
+    jobDocumentAnalysis: "整篇文档分析批次",
+    jobDocumentSynthesis: "文档级知识整合批次",
     jobPlanGeneration: "Wiki 结构设计",
     jobRelevance: "相关性筛选批次",
-    jobExtraction: "知识抽取批次",
-    jobClassification: "实体分类批次",
+    jobClaimExtraction: "证据声明账本批次",
+    jobCandidateCatalog: "全局 Candidate 目录批次",
+    jobSummarization: "Wiki 摘要批次",
     jobElapsed: "已用时",
     documentUploaded: "等待处理",
     documentParsed: "知识已提取",
@@ -328,14 +334,12 @@ const copy = {
 const templateCopy = {
   en: {
     templates: "Blueprint presets",
-    research: "Academic evidence",
-    course: "Course & learning",
-    experimental: "Experiments & samples",
-    general: "Smart auto-detect",
-    business: "Business evidence",
+    auto: "Smart auto-detect",
+    research: "Academic papers",
+    course: "Course learning",
     custom: "Custom blueprint",
     templateHint:
-      "Start from a research blueprint, or define a custom knowledge boundary.",
+      "Choose a starting blueprint; every preset remains editable before building.",
      templateNoSources:
         "Blueprint applied. Add evidence sources before building the Wiki.",
     templateApplied:
@@ -343,14 +347,12 @@ const templateCopy = {
   },
   zh: {
     templates: "研究蓝图预设",
-    research: "学术证据",
-    course: "课程与学习",
-    experimental: "实验与样品",
-    general: "智能识别",
-    business: "商业证据",
+    auto: "智能识别",
+    research: "学术论文",
+    course: "课程学习",
     custom: "自定义蓝图",
     templateHint:
-      "从预设研究蓝图开始，或选择「自定义蓝图」定义自己的知识边界。",
+      "选择一个起点；确认构建前仍可按研究目标修改全部蓝图字段。",
     templateNoSources: "研究蓝图已应用。请添加证据来源，再开始构建 Wiki。",
     templateApplied: "研究蓝图已应用。确认知识边界后即可构建 Wiki。",
   },
@@ -385,145 +387,85 @@ const emptyProfile: WikiProfile = {
   customRequirements: "",
 };
 const PRESET_TEMPLATES: Record<
-  "general" | "research" | "course" | "experimental" | "business",
+  "auto" | "research" | "course",
   { en: WikiProfile; zh: WikiProfile }
 > = {
   research: {
     en: {
-    version: "1.0",
-    researchGoal:
-      "Extract the core concepts, methods, evidence, and findings from academic papers or lecture notes, and connect them into a traceable knowledge structure.",
-    domain: "Academic research",
-    entityTypes: [
-      "concept",
-      "method",
-      "theory",
-      "experiment",
-      "metric",
-      "formula",
-    ],
-    importantFields: [
-      "definition",
-      "formula",
-      "method",
-      "conclusion",
-      "evidence",
-    ],
-    preferredRelations: ["derives", "proves", "applies", "compares", "causes"],
-    exclude: [],
-    extractNumericData: true,
-    preserveUnits: true,
-    extractTables: false,
-    evidenceRequired: true,
-    notes: "",
-    },
-    zh: {
       version: "1.0",
-      researchGoal: "从学术论文或课件中提取核心概念、方法、证据与结论，并将其连接为可追溯的知识结构。",
-      domain: "学术研究",
-      entityTypes: ["概念", "方法", "理论", "实验", "指标", "公式"],
-      importantFields: ["定义", "公式", "方法", "结论", "证据"],
-      preferredRelations: ["推导", "证明", "应用", "对比", "导致"],
-      exclude: [],
+      researchGoal: "Build an academic-paper Wiki that explains each study's research question, methods, evidence, findings, mechanisms, metrics, limitations, and points of agreement or conflict across sources.",
+      domain: "Academic papers",
+      entityTypes: ["concept", "claim", "method", "experiment", "mechanism", "metric"],
+      importantFields: ["research question", "study object", "method", "conditions", "finding", "value", "unit", "limitation", "evidence"],
+      preferredRelations: ["investigates", "measured by", "supports", "contradicts", "explains", "compares"],
+      exclude: ["administrative text", "references without substantive findings"],
       extractNumericData: true,
       preserveUnits: true,
-      extractTables: false,
+      extractTables: true,
       evidenceRequired: true,
-      notes: "",
-    },
-  },
-  general: {
-    en: {
-    version: "1.0",
-    researchGoal:
-      "Detect the document purpose and build the smallest sufficient evidence-grounded Wiki for understanding, retrieval, comparison, analysis, or decision support.",
-    domain: "Auto-detected",
-    entityTypes: [],
-    importantFields: ["definition", "evidence"],
-    preferredRelations: [],
-    exclude: [],
-    extractNumericData: true,
-    preserveUnits: true,
-    extractTables: false,
-    evidenceRequired: true,
-    notes: "",
+      notes: "Keep claims tied to their study conditions. Separate reported findings from inferred synthesis and preserve limitations or conflicting evidence.",
+      customRequirements: "Use the paper title, abstract, methods, results, and discussion to establish study scope. Do not merge findings from incompatible materials, samples, conditions, or populations.",
     },
     zh: {
       version: "1.0",
-      researchGoal: "自动识别文档用途，生成满足理解、检索、比较、分析或决策需求的最小充分、证据可追溯 Wiki。",
-      domain: "自动识别",
+      researchGoal: "构建面向学术论文的 Wiki，说明每项研究的研究问题、方法、证据、发现、机制、指标、局限，以及不同来源之间的一致与冲突。",
+      domain: "学术论文",
+      entityTypes: ["概念", "主张", "方法", "实验", "机制", "指标"],
+      importantFields: ["研究问题", "研究对象", "方法", "条件", "发现", "数值", "单位", "局限", "证据"],
+      preferredRelations: ["研究对象", "测量方法", "支持", "矛盾", "解释", "对比"],
+      exclude: ["行政文本", "没有实质发现的参考文献条目"],
+      extractNumericData: true,
+      preserveUnits: true,
+      extractTables: true,
+      evidenceRequired: true,
+      notes: "主张必须绑定其研究条件；区分论文明确报告的发现与 AI 综合推断，并保留局限性和冲突证据。",
+      customRequirements: "根据论文标题、摘要、方法、结果与讨论确定研究范围。不得合并材料、样品、条件或研究对象不兼容的发现。",
+    },
+  },
+  auto: {
+    en: {
+      version: "1.0",
+      researchGoal: "Identify what the uploaded materials are for and automatically design the smallest sufficient, evidence-grounded Wiki for the user's stated need.",
+      domain: "Auto-detected from sources",
       entityTypes: [],
-      importantFields: ["定义", "证据"],
+      importantFields: [],
       preferredRelations: [],
-      exclude: [],
-      extractNumericData: true,
-      preserveUnits: true,
-      extractTables: false,
-      evidenceRequired: true,
-      notes: "",
-    },
-  },
-  business: {
-    en: {
-    version: "1.0",
-    researchGoal:
-      "Extract market, competitive, strategic, and financial information from business documents, and map the relationships between players, products, and metrics.",
-    domain: "Business analysis",
-    entityTypes: [
-      "company",
-      "product",
-      "market",
-      "strategy",
-      "metric",
-      "trend",
-    ],
-    importantFields: ["market share", "revenue", "strategy", "competition"],
-    preferredRelations: [
-      "competes with",
-      "invests in",
-      "partners with",
-      "affects",
-      "grows",
-    ],
-    exclude: [],
-    extractNumericData: true,
-    preserveUnits: true,
-    extractTables: true,
-    evidenceRequired: true,
-    notes: "",
-    },
-    zh: {
-      version: "1.0",
-      researchGoal: "从商业文档中提取市场、竞争、战略与财务信息，梳理参与者、产品与指标之间的关系。",
-      domain: "商业分析",
-      entityTypes: ["公司", "产品", "市场", "战略", "指标", "趋势"],
-      importantFields: ["市场份额", "营收", "战略", "竞争"],
-      preferredRelations: ["竞争", "投资", "合作", "影响", "增长"],
       exclude: [],
       extractNumericData: true,
       preserveUnits: true,
       extractTables: true,
       evidenceRequired: true,
-      notes: "",
+      notes: "Infer the appropriate knowledge unit, fields, categories, and relations from the user's goal and the corpus. Do not impose a course or paper structure when the sources require another structure.",
+      customRequirements: "First identify the source type and user task. Then propose only the reusable, evidence-supported knowledge needed for understanding, retrieval, comparison, analysis, or decision support.",
+    },
+    zh: {
+      version: "1.0",
+      researchGoal: "识别上传材料的用途，并根据使用者提出的具体需求，自动设计最小充分、证据可追溯的 Wiki。",
+      domain: "由材料自动识别",
+      entityTypes: [],
+      importantFields: [],
+      preferredRelations: [],
+      exclude: [],
+      extractNumericData: true,
+      preserveUnits: true,
+      extractTables: true,
+      evidenceRequired: true,
+      notes: "先从用户目标和语料判断合适的知识单元、字段、分类和关系。材料需要其他结构时，不要预设为课程或论文结构。",
+      customRequirements: "先识别材料类型和用户任务；随后只保留理解、检索、比较、分析或决策所需、可由证据支撑且可跨来源复用的知识。",
     },
   },
   course: {
-    en: { version: "1.0", researchGoal: "Build a learning Wiki that preserves concepts, definitions, laws, formulas, derivations, examples, and prerequisite structure across the course.", domain: "Course learning", entityTypes: ["concept", "law", "formula", "method", "example", "quantity"], importantFields: ["definition", "formula", "derivation", "conditions", "example"], preferredRelations: ["defines", "derives", "requires", "applies to", "exemplifies"], exclude: ["administrative course information"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "" },
-    zh: { version: "1.0", researchGoal: "构建保留课程概念、定义、定律、公式、推导、例题与先修结构的学习 Wiki。", domain: "课程学习", entityTypes: ["概念", "定律", "公式", "方法", "例子", "物理量"], importantFields: ["定义", "公式", "推导", "适用条件", "例子"], preferredRelations: ["定义", "推导", "依赖", "应用于", "举例"], exclude: ["课程行政信息"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "" },
-  },
-  experimental: {
-    en: { version: "1.0", researchGoal: "Extract experiments as condition-bound records and connect samples, procedures, measurements, observations, mechanisms, and outcomes without merging incompatible conditions.", domain: "Experimental research", entityTypes: ["sample", "material", "process", "experiment", "measurement", "mechanism", "outcome"], importantFields: ["sample identity", "conditions", "procedure", "value", "unit", "uncertainty", "evidence"], preferredRelations: ["prepared by", "tested under", "measured by", "produces", "affects"], exclude: [], extractNumericData: true, preserveUnits: true, extractTables: true, evidenceRequired: true, notes: "" },
-    zh: { version: "1.0", researchGoal: "以实验条件为边界提取记录，连接样品、工艺、测量、观察、机制与结果，禁止合并不兼容条件。", domain: "实验研究", entityTypes: ["样品", "材料", "工艺", "实验", "测量", "机制", "结果"], importantFields: ["样品标识", "实验条件", "步骤", "数值", "单位", "不确定度", "证据"], preferredRelations: ["制备于", "测试条件", "测量方法", "产生", "影响"], exclude: [], extractNumericData: true, preserveUnits: true, extractTables: true, evidenceRequired: true, notes: "" },
+    en: { version: "1.0", researchGoal: "Build a course-learning Wiki that connects concepts, definitions, laws, formulas, derivations, examples, common misconceptions, and prerequisite knowledge into an explainable learning path.", domain: "Course learning", entityTypes: ["concept", "law", "formula", "method", "example", "quantity"], importantFields: ["definition", "formula", "derivation", "conditions", "example", "prerequisite", "common misconception"], preferredRelations: ["defines", "derives", "requires", "applies to", "exemplifies"], exclude: ["administrative course information"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "Preserve assumptions, units, sign conventions, and the conditions under which a formula, law, or method applies.", customRequirements: "Organize knowledge for learning rather than merely listing chapters. Connect prerequisites to later concepts and keep derivation steps and worked examples tied to their source material." },
+    zh: { version: "1.0", researchGoal: "构建课程学习 Wiki，把概念、定义、定律、公式、推导、例题、常见误解与先修知识连接成可解释的学习路径。", domain: "课程学习", entityTypes: ["概念", "定律", "公式", "方法", "例子", "物理量"], importantFields: ["定义", "公式", "推导", "适用条件", "例子", "先修知识", "常见误解"], preferredRelations: ["定义", "推导", "依赖", "应用于", "举例"], exclude: ["课程行政信息"], extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true, notes: "保留假设、单位、符号约定，以及公式、定律或方法的适用条件。", customRequirements: "按学习路径组织知识，而不是只罗列章节；连接先修知识与后续概念，并让推导步骤、例题与原始材料保持可追溯关联。" },
   },
 };
 type PresetTemplateId = keyof typeof PRESET_TEMPLATES;
 const TEMPLATE_PRESETS: Record<PresetTemplateId, NonNullable<WikiProfile["preset"]>> = {
-  general: "auto", research: "research", course: "course",
-  experimental: "experimental", business: "business",
+  auto: "auto", research: "research", course: "course",
 };
 const templateForProfile = (profile: WikiProfile | undefined): PresetTemplateId | "custom" => {
   if (!profile?.preset || profile.preset === "custom") return "custom";
-  if (profile.preset === "auto") return "general";
+  if (profile.preset === "auto" || profile.preset === "general") return "auto";
   return (Object.entries(TEMPLATE_PRESETS).find(([, preset]) => preset === profile.preset)?.[0] as PresetTemplateId | undefined) ?? "custom";
 };
 const split = (input: string) =>
@@ -952,11 +894,9 @@ function Overview({
             </div>
             <div className="template-chips">
               {([
-                ["general", t.general],
+                ["auto", t.auto],
                 ["research", t.research],
                 ["course", t.course],
-                ["experimental", t.experimental],
-                ["business", t.business],
               ] as const).map(([id, label]) => (
                 <button key={id} type="button" className={selectedTemplate === id ? "selected" : ""} disabled={saving} onClick={() => void applyTemplate(id)}>{label}</button>
               ))}
@@ -1353,6 +1293,21 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                       <p>{selected.classification.semanticExplanation}</p>
                     ) : null}
                     <p className="muted">{selected.classification.reason}</p>
+                  </>
+                ) : null}
+                {(selected.semanticMembers?.length ?? 0) > 1 ? (
+                  <>
+                    <h3>{t.semanticMembers}</h3>
+                    <ul className="semantic-members">
+                      {selected.semanticMembers?.map((member) => (
+                        <li key={member.candidateId}>
+                          <strong>{member.name}</strong>
+                          <span className="type-pill">{member.action}</span>
+                          {member.scope ? <small>{member.scope}</small> : null}
+                          <p className="muted">{member.reason}</p>
+                        </li>
+                      ))}
+                    </ul>
                   </>
                 ) : null}
                 <h3>{t.properties}</h3>
@@ -1888,12 +1843,15 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
   }[job.status] : undefined;
   const batch = job?.batchProgress;
   const batchLabel = batch ? {
-    corpus_analysis: t.jobCorpusAnalysis,
+    document_analysis: t.jobDocumentAnalysis,
+    document_synthesis: t.jobDocumentSynthesis,
     plan_generation: t.jobPlanGeneration,
     relevance: t.jobRelevance,
-    extraction: t.jobExtraction,
-    classification: t.jobClassification,
-    classification_review: t.jobClassification,
+    extraction: t.jobClaimExtraction,
+    claim_extraction: t.jobClaimExtraction,
+    candidate_catalog: t.jobCandidateCatalog,
+    semantic_consolidation: t.jobResolving,
+    wiki_summarization: t.jobSummarization,
   }[batch.phase] : undefined;
   const elapsed = batch
     ? batch.elapsedSeconds >= 60

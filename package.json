@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "tsx watch --env-file=.env src/server/index.ts",
+    "dev:server": "tsx watch --exclude data/** --exclude dist/** --exclude dist-server/** --env-file=.env src/server/index.ts",
     "dev:web": "vite",
     "build": "tsc -b && vite build",
     "start": "node --env-file=.env dist-server/server/index.js",

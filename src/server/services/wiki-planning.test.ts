@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { DocumentBlock, WikiGenerationPlan, WikiProfile } from "../../shared/contracts.js";
+import type { WikiGenerationPlan, WikiProfile } from "../../shared/contracts.js";
 import {
   applyPlannedEntityTypes,
   fallbackGenerationPlan,
   normalizeGenerationPlan,
-  representativeCorpusSample,
   resolveEntityClassification,
 } from "./wiki-planning-service.js";
 
@@ -45,6 +44,13 @@ const academicProfile: WikiProfile = {
 };
 
 describe("Wiki generation planning", () => {
+  it("freezes a candidate extraction contract instead of letting each batch choose candidate granularity", () => {
+    const contract = plan("zh").candidateExtractionContract;
+    expect(contract?.requireBlockCoverage).toBe(true);
+    expect(contract?.atomicityRules.length).toBeGreaterThanOrEqual(2);
+    expect(contract?.attachInsteadOfCreateRules.length).toBeGreaterThan(0);
+  });
+
   it("does not force course-only categories into every Wiki mode", () => {
     expect(plan("zh").categories.some(category => category.role === "law")).toBe(false);
   });
@@ -212,16 +218,4 @@ describe("Wiki generation planning", () => {
     expect(entity.type).toBe("概念");
   });
 
-  it("samples every document and includes distributed late content", () => {
-    const blocks: DocumentBlock[] = [
-      ...Array.from({ length: 12 }, (_, index) => ({
-        id: `a-${index}`, documentId: "doc-a", page: index + 1, blockType: "paragraph" as const,
-        text: `A ${index}`, sourceLocation: `page ${index + 1}`,
-      })),
-      { id: "b-0", documentId: "doc-b", page: 1, blockType: "paragraph", text: "B", sourceLocation: "page 1" },
-    ];
-    const samples = representativeCorpusSample(blocks, 4);
-    expect(samples.map(sample => sample.documentId)).toEqual(["doc-a", "doc-b"]);
-    expect(samples[0].blocks.some(block => block.blockId === "a-11")).toBe(true);
-  });
 });

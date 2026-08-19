@@ -33,6 +33,10 @@ describe("adaptive graph relation validation", () => {
     const state = {
       projects: [], documents: [], blocks: [{ id: "b", documentId: "doc", page: 1, blockType: "paragraph" as const, text: "A depends on B.", sourceLocation: "page 1" }],
       evidence: [evidence], nodes: graph.nodes, edges: graph.edges, jobs: [], chatThreads: [], chatMessages: [],
+      buildManifests: [], knowledgeCandidates: [], ontologyExtensionProposals: [],
+      semanticResolutions: [], conceptRegistry: [],
+      evidenceClaims: [], evidenceClaimCoverage: [],
+      documentAnalyses: [],
     };
     clearProjectGraphKnowledge(state, "p");
     expect(state.blocks).toHaveLength(1);

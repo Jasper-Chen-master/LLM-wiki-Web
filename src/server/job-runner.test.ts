@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ProcessingJob, Project } from "../shared/contracts.js";
-import { recoverInterruptedJobs, runProjectJob } from "./job-runner.js";
+import { hasUnresolvedOnlyClaimLedger, recoverInterruptedJobs, runProjectJob } from "./job-runner.js";
 import { Store } from "./store.js";
 
 const project = (): Project => ({
@@ -31,7 +31,7 @@ describe("project job coordination", () => {
     vi.spyOn(store, "save").mockResolvedValue();
     const job: ProcessingJob = {
       id: "job-a", projectId: "project-a", status: "extracting", progress: 75,
-      message: "Extracting", batchProgress: { phase: "extraction", completed: 2, total: 5, elapsedSeconds: 30 },
+      message: "Extracting", batchProgress: { phase: "claim_extraction", completed: 2, total: 5, elapsedSeconds: 30 },
       errors: [], createdAt: "2026-08-18T00:00:00.000Z", updatedAt: "2026-08-18T00:01:00.000Z",
     };
     store.data.jobs.push(job);
@@ -40,5 +40,12 @@ describe("project job coordination", () => {
     expect(job.batchProgress).toBeUndefined();
     expect(job.errors).toContain("The in-process worker stopped before this job completed.");
     expect(store.save).toHaveBeenCalledOnce();
+  });
+
+  it("detects an all-unresolved claim ledger as rebuildable derived knowledge", () => {
+    expect(hasUnresolvedOnlyClaimLedger([{ status: "unresolved" }, { status: "unresolved" }], 0)).toBe(true);
+    expect(hasUnresolvedOnlyClaimLedger([{ status: "claimed" }, { status: "unresolved" }], 1)).toBe(false);
+    expect(hasUnresolvedOnlyClaimLedger([{ status: "no_goal_relevant_claim" }], 0)).toBe(false);
+    expect(hasUnresolvedOnlyClaimLedger([], 0)).toBe(false);
   });
 });

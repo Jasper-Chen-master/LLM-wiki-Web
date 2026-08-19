@@ -1,5 +1,7 @@
 import type {
   DocumentBlock,
+  CandidateExtractionContract,
+  NodeCreationPolicy,
   WikiCategory,
   WikiCategoryRole,
   WikiClassificationDecision,
@@ -52,6 +54,45 @@ function qualityPolicy(profile?: WikiProfile) {
   }
 }
 
+function nodeCreationPolicy(profile?: WikiProfile): NodeCreationPolicy {
+  const thresholds = profile?.qualityPreference === "precision_first"
+    ? { publishThreshold: .68, reviewThreshold: .42 }
+    : profile?.qualityPreference === "recall_first"
+      ? { publishThreshold: .48, reviewThreshold: .28 }
+      : { publishThreshold: .58, reviewThreshold: .34 };
+  return {
+    version: "1.0", ...thresholds, minimumEvidenceCount: 1,
+    requireIndependentMeaning: true, retainReviewCandidates: true,
+  };
+}
+
+function candidateExtractionContract(profile: WikiProfile | undefined, plan: WikiGenerationPlan): CandidateExtractionContract {
+  const zh = plan.outputLanguage === "zh";
+  return {
+    version: "1.0",
+    analysisUnit: profile?.unitOfAnalysis || plan.unitOfAnalysis || (zh ? "可跨来源复用、可由证据独立说明的知识单元" : "an evidence-supported knowledge unit reusable across sources"),
+    atomicityRules: zh ? [
+      "一条 Evidence Claim 只能表达一个可由当前 Block 直接支持的定义、规律、公式、方法、条件、发现或示例。",
+      "不要把通用概念、具体实例、适用条件和推论混入同一条 Claim；应分别记录并通过后续目录关联。",
+      "没有可直接定位的证据时不得创建 Claim，也不得用常识补全论文或教材未陈述的内容。",
+    ] : [
+      "One Evidence Claim expresses exactly one definition, principle, formula, method, condition, finding, or example directly supported by its current block.",
+      "Do not mix a general concept, a concrete instance, applicability conditions, and an implication in one claim; record them separately for later cataloging.",
+      "Do not create a claim without directly locatable support or fill gaps with outside knowledge.",
+    ],
+    attachInsteadOfCreateRules: zh ? [
+      "实例、习题情境、符号约定、适用条件、反例、常见误解或同一概念的重复表述默认附着到已有概念，不自动成为独立 Candidate。",
+      "只有当该信息在当前分析单元下可被独立解释、检索或跨来源复用时，才建议创建 Candidate。",
+    ] : [
+      "Examples, problem contexts, notation conventions, applicability conditions, counterexamples, misconceptions, and repeated wording attach to a concept by default instead of creating a separate Candidate.",
+      "Suggest a Candidate only when the item can be independently explained, retrieved, or reused across sources for this analysis unit.",
+    ],
+    exclusionRules: unique([...(profile?.exclude ?? []), ...(zh ? ["行政信息、目录、无实质内容的参考文献"] : ["administrative text, tables of contents, references without substantive content"])]).slice(0, 12),
+    requiredClaimKinds: unique([...(profile?.importantFields ?? []), ...plan.requiredKnowledge]).slice(0, 16),
+    requireBlockCoverage: true,
+  };
+}
+
 function defaultFieldRules(profile: WikiProfile | undefined, plan: WikiGenerationPlan) {
   if (plan.fieldRules?.length) return plan.fieldRules;
   return unique([...(profile?.importantFields ?? []), ...plan.requiredKnowledge]).slice(0, 32).map((label, index) => ({
@@ -89,36 +130,6 @@ function normalizeRelationCategoryIds(planCategories: WikiCategory[], finalCateg
     const byRole = original && finalCategories.find(category => category.role === original.role);
     return byRole ? [byRole.id] : [];
   }));
-}
-
-export interface CorpusSample {
-  documentId: string;
-  blocks: Array<{ blockId: string; page: number; section?: string; blockType: DocumentBlock["blockType"]; text: string }>;
-}
-
-/** Samples every document at distributed positions so planning reflects the corpus, not only its first pages. */
-export function representativeCorpusSample(blocks: DocumentBlock[], blocksPerDocument = 8): CorpusSample[] {
-  const byDocument = new Map<string, DocumentBlock[]>();
-  for (const block of blocks) byDocument.set(block.documentId, [...(byDocument.get(block.documentId) ?? []), block]);
-  return [...byDocument.entries()].map(([documentId, documentBlocks]) => {
-    const headings = documentBlocks.filter(block => block.blockType === "heading").slice(0, 3);
-    const remaining = Math.max(1, blocksPerDocument - headings.length);
-    const distributed = Array.from({ length: Math.min(remaining, documentBlocks.length) }, (_, index) => {
-      const position = Math.round(index * (documentBlocks.length - 1) / Math.max(remaining - 1, 1));
-      return documentBlocks[position];
-    });
-    const selectedIds = unique([...headings, ...distributed].map(block => block.id));
-    return {
-      documentId,
-      blocks: selectedIds
-        .map(id => documentBlocks.find(block => block.id === id))
-        .filter((block): block is DocumentBlock => Boolean(block))
-        .map(block => ({
-          blockId: block.id, page: block.page, section: block.section, blockType: block.blockType,
-          text: block.text.slice(0, 1_200),
-        })),
-    };
-  });
 }
 
 function requiredCategory(language: "en" | "zh", role: WikiCategoryRole): WikiCategory {
@@ -181,6 +192,8 @@ export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: Wiki
     unitOfAnalysis: profile?.unitOfAnalysis || plan.unitOfAnalysis || "",
     targetQuestions: unique([...(profile?.targetQuestions ?? []), ...(plan.targetQuestions ?? [])]).slice(0, 20),
     qualityPolicy: plan.qualityPolicy ?? qualityPolicy(profile),
+    nodeCreationPolicy: plan.nodeCreationPolicy ?? nodeCreationPolicy(profile),
+    candidateExtractionContract: plan.candidateExtractionContract ?? candidateExtractionContract(profile, plan),
   };
   const relationRules = defaultRelationRules(normalizedPlan).map(rule => ({
     ...rule,
@@ -374,6 +387,7 @@ export function ensurePlanCategoriesForEntities(
   plan: WikiGenerationPlan,
   entities: Array<{ name: string; canonicalName?: string; type?: string }>,
 ): void {
+  if (plan.frozen) return;
   const roles = unique(entities.flatMap(entity => {
     const name = entity.canonicalName ?? entity.name;
     const role = roleFromName(name) ?? safeFallbackRole(entity);
