@@ -283,7 +283,11 @@ class SafePipelineProvider implements PipelineProvider {
       const batches = chunksByTextBudget(blocks, block => Math.min(block.text.length, budget.itemChars), budget);
       await report({ phase: "relevance", completed: 0, total: batches.length });
       await mapWithConcurrency(batches, pipelineConcurrency(profile), async batch => {
-        const evidenceMap = batch.map(block => ({ blockId: block.id, text: block.text.slice(0, budget.itemChars) }));
+        const evidenceMap = batch.map(block => ({
+          blockId: block.id, documentId: block.documentId, page: block.page,
+          section: block.section, blockType: block.blockType,
+          text: block.text.slice(0, budget.itemChars),
+        }));
         try {
           const output = await generateStructured(this.provider, {
             system: relevanceSystemPrompt(profile),
@@ -317,7 +321,11 @@ class SafePipelineProvider implements PipelineProvider {
       const batches = chunksByTextBudget(blocks, block => Math.min(block.text.length, budget.itemChars), budget);
       await report({ phase: "extraction", completed: 0, total: batches.length });
       const outputs = await mapWithConcurrency(batches, pipelineConcurrency(profile), async batch => {
-        const evidenceMap = batch.map(block => ({ blockId: block.id, text: block.text.slice(0, budget.itemChars) }));
+        const evidenceMap = batch.map(block => ({
+          blockId: block.id, documentId: block.documentId, page: block.page,
+          section: block.section, blockType: block.blockType,
+          text: block.text.slice(0, budget.itemChars),
+        }));
         let output: KnowledgeExtraction;
         try {
           output = await generateStructured(this.provider, {
@@ -333,7 +341,7 @@ class SafePipelineProvider implements PipelineProvider {
           try {
             output = await generateStructured(this.provider, {
               system: extractionSystemPrompt(profile),
-              prompt: `${extractionPrompt(profile, plan, evidenceMap)}\nThe prior extraction was empty. Re-check named, evidence-backed knowledge without inventing facts.`,
+              prompt: `${extractionPrompt(profile, plan, evidenceMap)}\nThe prior extraction was empty. Re-run the knowledge inventory and coverage audit over every supplied block. Recover any definition, method, mechanism, material, quantity, formula, experiment, phenomenon, condition, limitation, result, or relation that is both goal-relevant and evidence-backed; do not invent facts.`,
               temperature: 0,
               maxTokens: 8_000,
             }, extractionSchema, 1);

@@ -87,3 +87,11 @@ name and the semantic proposal triggers the independent review pass. A high-conf
 conclusion may override a misleading name, while named laws, theorems, and theories still require
 a source excerpt that explicitly establishes that identity. If AI classification is unavailable,
 surface-based fallbacks remain marked for review rather than being presented as verified facts.
+
+## 2026-08-20 — Comprehension precedes extraction and classification
+
+Wiki generation uses hierarchical whole-context understanding rather than isolated keyword extraction. Corpus planning first synthesizes distributed evidence from every document into themes and a required-knowledge coverage contract. Each relevance, extraction, and classification batch then reads its complete supplied scope with document, page, section, and block-type context before making item-level decisions.
+
+Extraction performs an internal knowledge inventory, canonical consolidation, and coverage audit before returning structured output. Nodes represent reusable knowledge subjects rather than paragraphs, sentences, headings, or incidental properties; repeated names and notation variants are consolidated as aliases, while independently meaningful subjects remain separate. Coverage includes supported conditions, limitations, exceptions, negative results, and disagreements, but never permits unsupported nodes merely to satisfy a checklist.
+
+Classification compares every entity against all controlled category definitions and corpus-specific rules, then audits consistency across comparable entities. This strengthens semantic consistency without weakening the existing evidence validation, controlled-category enforcement, or selective independent review boundary.
