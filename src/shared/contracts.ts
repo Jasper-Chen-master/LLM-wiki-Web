@@ -17,9 +17,30 @@ export type WikiQualityPreference = z.infer<typeof WikiQualityPreferenceSchema>;
 export const WikiCostPreferenceSchema = z.enum(["economy", "balanced", "quality"]);
 export type WikiCostPreference = z.infer<typeof WikiCostPreferenceSchema>;
 
+/**
+ * Normalizes the comma-separated knowledge-type input used by the Research Profile UI.
+ * A profile may arrive from the UI as an array or from an LLM as one comma-delimited string;
+ * both forms must produce the same ordered, duplicate-free type contract.
+ */
+export function normalizeEntityTypes(types: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of types) {
+    for (const piece of raw.normalize("NFKC").split(/[,，]/u)) {
+      const label = piece.trim();
+      const key = label.toLocaleLowerCase();
+      if (!label || seen.has(key)) continue;
+      seen.add(key);
+      result.push(label);
+    }
+  }
+  return result;
+}
+
 export const WikiProfileSchema = z.object({
   version: z.literal("1.0"), researchGoal: z.string().min(1), domain: z.string().default("General research"),
-  entityTypes: z.array(z.string()).default([]), importantFields: z.array(z.string()).default([]),
+  entityTypes: z.array(z.string()).default([]).transform(normalizeEntityTypes)
+    .refine(types => types.length <= 16, "At most 16 knowledge types are supported"), importantFields: z.array(z.string()).default([]),
   preferredRelations: z.array(z.string()).default([]), exclude: z.array(z.string()).default([]),
   extractNumericData: z.boolean().default(true), preserveUnits: z.boolean().default(true), extractTables: z.boolean().default(false),
   evidenceRequired: z.boolean().default(true), notes: z.string().default(""), outputLanguage: z.enum(["en", "zh"]).optional(),
@@ -40,6 +61,8 @@ export const WikiCategorySchema = z.object({
   exclusionExamples: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
 });
 export type WikiCategory = z.infer<typeof WikiCategorySchema>;
+export const WikiEntityTypePolicySchema = z.enum(["open", "strict"]);
+export type WikiEntityTypePolicy = z.infer<typeof WikiEntityTypePolicySchema>;
 export const WikiFieldPrioritySchema = z.enum(["critical", "high", "medium"]);
 export const WikiFieldRuleSchema = z.object({
   id: z.string().trim().min(1).max(80), label: z.string().trim().min(1).max(120),
@@ -76,6 +99,8 @@ export const WikiGenerationPlanSchema = z.object({
   fieldRules: z.array(WikiFieldRuleSchema).max(32).default([]),
   relationRules: z.array(WikiRelationRuleSchema).max(24).default([]),
   qualityPolicy: WikiQualityPolicySchema.optional(),
+  /** `strict` means categories must exactly match the user's non-empty entityTypes list. */
+  entityTypePolicy: WikiEntityTypePolicySchema.optional(),
   analyzedDocumentIds: z.array(z.string().min(1)).max(100), createdAt: z.string().datetime(),
 });
 export type WikiGenerationPlan = z.infer<typeof WikiGenerationPlanSchema>;
@@ -94,7 +119,9 @@ export interface WikiClassificationDecision {
   alternatives?: string[];
 }
 
-export interface Project { id: string; name: string; createdAt: string; updatedAt?: string; profile?: WikiProfile; profileConfirmed: boolean; wikiRevision?: number; generationPlan?: WikiGenerationPlan; rebuildRequired?: boolean; }
+export type WikiProfileLanguage = "en" | "zh";
+export type SavedPresetProfiles = Partial<Record<NonNullable<WikiProfile["preset"]>, Partial<Record<WikiProfileLanguage, WikiProfile>>>>;
+export interface Project { id: string; name: string; createdAt: string; updatedAt?: string; profile?: WikiProfile; /** User-saved overrides for reusable non-custom blueprint presets, keyed by preset and language. */ presetProfiles?: SavedPresetProfiles; profileConfirmed: boolean; wikiRevision?: number; generationPlan?: WikiGenerationPlan; rebuildRequired?: boolean; }
 export interface DocumentRecord { id: string; projectId: string; fileName: string; storagePath?: string; kind: DocumentKind; role: "source" | "profile"; status: "uploaded" | "parsed" | "failed"; error?: string; uploadedAt: string; }
 export interface DocumentBlock { id: string; documentId: string; page: number; section?: string; blockType: "paragraph" | "heading" | "table"; text: string; sourceLocation: string; }
 export interface Evidence { id: string; documentId: string; page: number; section?: string; blockId: string; originalText: string; status: "observed" | "reported" | "inferred"; }

@@ -95,3 +95,16 @@ Wiki generation uses hierarchical whole-context understanding rather than isolat
 Extraction performs an internal knowledge inventory, canonical consolidation, and coverage audit before returning structured output. Nodes represent reusable knowledge subjects rather than paragraphs, sentences, headings, or incidental properties; repeated names and notation variants are consolidated as aliases, while independently meaningful subjects remain separate. Coverage includes supported conditions, limitations, exceptions, negative results, and disagreements, but never permits unsupported nodes merely to satisfy a checklist.
 
 Classification compares every entity against all controlled category definitions and corpus-specific rules, then audits consistency across comparable entities. This strengthens semantic consistency without weakening the existing evidence validation, controlled-category enforcement, or selective independent review boundary.
+
+## 2026-08-20 — Non-empty user type lists are closed contracts
+
+The Research Profile UI accepts knowledge types as comma-separated labels. Server-side profile normalization splits ASCII and Chinese commas, trims whitespace, preserves order, and removes duplicates. A non-empty result sets `WikiGenerationPlan.entityTypePolicy` to `strict`: planning, extraction, classification, and deterministic post-processing may use only those exact labels, and corpus-derived categories cannot be added or removed. An empty list remains `open` so automatic/custom Wikis can infer a reusable ontology from the corpus.
+
+## 2026-08-20 — Persist edited blueprint presets per project
+
+Built-in blueprint chips remain useful starting points, but users often adapt their wording and
+fields to a recurring research workflow. When a non-custom profile is saved, the current profile
+is persisted as a project-scoped override under its preset and output language. Selecting that
+preset later restores the override; custom profiles remain project profiles rather than silently
+changing a built-in template. This keeps reusable defaults stable within a research space without
+leaking one project's domain-specific edits into another project.

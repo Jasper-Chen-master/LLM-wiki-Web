@@ -1,11 +1,12 @@
-import type {
-  DocumentBlock,
-  WikiCategory,
-  WikiCategoryRole,
-  WikiClassificationDecision,
-  WikiGenerationPlan,
-  WikiNode,
-  WikiProfile,
+import {
+  normalizeEntityTypes,
+  type DocumentBlock,
+  type WikiCategory,
+  type WikiCategoryRole,
+  type WikiClassificationDecision,
+  type WikiGenerationPlan,
+  type WikiNode,
+  type WikiProfile,
 } from "../../shared/contracts.js";
 
 const CATEGORY_DEFAULTS: Record<"en" | "zh", Record<WikiCategoryRole, Pick<WikiCategory, "id" | "label" | "definition">>> = {
@@ -127,7 +128,7 @@ function requiredCategory(language: "en" | "zh", role: WikiCategoryRole): WikiCa
 
 function profileCategories(profile: WikiProfile, language: "en" | "zh"): WikiCategory[] {
   const roleCounts = new Map<WikiCategoryRole, number>();
-  return unique(profile.entityTypes.map(type => type.trim()).filter(Boolean)).map(label => {
+  return normalizeEntityTypes(profile.entityTypes).map(label => {
     const role = roleFromType(label) ?? "other";
     const count = (roleCounts.get(role) ?? 0) + 1;
     roleCounts.set(role, count);
@@ -144,14 +145,20 @@ function profileCategories(profile: WikiProfile, language: "en" | "zh"): WikiCat
 
 /** Keeps user-declared ontology classes authoritative and collapses AI topics into broad roles. */
 export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: WikiProfile): WikiGenerationPlan {
-  const categories: WikiCategory[] = profile ? profileCategories(profile, plan.outputLanguage) : [];
+  const requestedEntityTypes = profile ? normalizeEntityTypes(profile.entityTypes) : [];
+  const strictEntityTypes = requestedEntityTypes.length > 0;
+  const categories: WikiCategory[] = profile
+    ? profileCategories({ ...profile, entityTypes: requestedEntityTypes }, plan.outputLanguage)
+    : [];
   const seenIds = new Set<string>();
   const seenLabels = new Set<string>();
   for (const category of categories) {
     seenIds.add(normalized(category.id));
     seenLabels.add(normalized(category.label));
   }
-  for (const category of plan.categories) {
+  // A non-empty user type list is a closed ontology. Corpus suggestions can still inform
+  // definitions, fields, and relations, but they must never add or remove top-level types.
+  for (const category of strictEntityTypes ? [] : plan.categories) {
     const idKey = normalized(category.id);
     const labelKey = normalized(category.label);
     if (!idKey || seenIds.has(idKey) || seenLabels.has(labelKey)) continue;
@@ -171,12 +178,16 @@ export function normalizeGenerationPlan(plan: WikiGenerationPlan, profile?: Wiki
   if (!categories.length) {
     categories.push(requiredCategory(plan.outputLanguage, "concept"));
   }
+  if (strictEntityTypes && categories.length > 16) {
+    throw new Error("The user-specified knowledge type list exceeds the 16-category Wiki limit");
+  }
   const normalizedPlan = {
     ...plan,
     version: "2.0" as const,
     requiredKnowledge: unique([...(profile?.importantFields ?? []), ...plan.requiredKnowledge]).slice(0, 24),
     relationTypes: unique([...(profile?.preferredRelations ?? []), ...plan.relationTypes]).slice(0, 24),
-    categories: categories.slice(0, 16),
+    categories: strictEntityTypes ? categories : categories.slice(0, 16),
+    entityTypePolicy: strictEntityTypes ? "strict" as const : plan.entityTypePolicy ?? "open" as const,
     detectedPreset: profile?.preset && profile.preset !== "auto" ? profile.preset : plan.detectedPreset ?? "auto",
     unitOfAnalysis: profile?.unitOfAnalysis || plan.unitOfAnalysis || "",
     targetQuestions: unique([...(profile?.targetQuestions ?? []), ...(plan.targetQuestions ?? [])]).slice(0, 20),
@@ -374,6 +385,7 @@ export function ensurePlanCategoriesForEntities(
   plan: WikiGenerationPlan,
   entities: Array<{ name: string; canonicalName?: string; type?: string }>,
 ): void {
+  if (plan.entityTypePolicy === "strict") return;
   const roles = unique(entities.flatMap(entity => {
     const name = entity.canonicalName ?? entity.name;
     const role = roleFromName(name) ?? safeFallbackRole(entity);

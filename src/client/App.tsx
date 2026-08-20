@@ -33,6 +33,7 @@ import type {
   WikiNode,
   WikiProfile,
 } from "../shared/contracts";
+import { getSavedPresetProfile } from "../shared/preset-profiles";
 import { api } from "./api";
 
 type Language = "en" | "zh";
@@ -93,7 +94,7 @@ const copy = {
     objectiveHint: "What should this Wiki help you understand, compare, or predict?",
     domain: "Research domain",
     entityTypes: "Knowledge types to retain",
-    entitiesHint: "material, mechanism, method, metric",
+    entitiesHint: "Comma-separated, e.g. material, method, metric",
     relations: "Relationships to prioritize",
     relationsHint: "causes, improves, measured by, derived from",
     ignore: "Knowledge to leave out",
@@ -234,7 +235,7 @@ const copy = {
     objectiveHint: "希望这个 Wiki 帮助你理解、比较或预测什么？",
     domain: "研究领域",
     entityTypes: "需要保留的知识类型",
-    entitiesHint: "材料、机制、方法、指标",
+    entitiesHint: "用逗号分隔，例如：材料, 机制, 方法, 指标",
     relations: "需要重点连接的关系",
     relationsHint: "导致、提升、通过…测量、由…推导",
     ignore: "不进入主 Wiki 的内容",
@@ -528,7 +529,7 @@ const templateForProfile = (profile: WikiProfile | undefined): PresetTemplateId 
 };
 const split = (input: string) =>
   input
-    .split(",")
+    .split(/[,，]/u)
     .map((value) => value.trim())
     .filter(Boolean);
 const join = (input: string[]) => input.join(", ");
@@ -817,16 +818,19 @@ function Overview({
     }
     const template = PRESET_TEMPLATES[selectedTemplate as keyof typeof PRESET_TEMPLATES];
     if (!template) return;
-    setProfile({ ...template[lang], preset: TEMPLATE_PRESETS[selectedTemplate as PresetTemplateId], outputLanguage: lang });
+    const preset = TEMPLATE_PRESETS[selectedTemplate as PresetTemplateId];
+    const saved = getSavedPresetProfile(project, preset, lang);
+    setProfile({ ...(saved ?? template[lang]), preset, outputLanguage: lang });
   }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
     value: WikiProfile[keyof WikiProfile],
   ) => setProfile((previous) => ({ ...previous, [key]: value }));
   const applyTemplate = async (templateId: PresetTemplateId) => {
-    const template = PRESET_TEMPLATES[templateId][lang];
+    const preset = TEMPLATE_PRESETS[templateId];
+    const template = getSavedPresetProfile(project, preset, lang) ?? PRESET_TEMPLATES[templateId][lang];
     setSelectedTemplate(templateId);
-    setProfile({ ...template, preset: TEMPLATE_PRESETS[templateId], outputLanguage: lang });
+    setProfile({ ...template, preset, outputLanguage: lang });
     setTemplateHint(
       snapshot.documents.some((document) => document.role === "source")
         ? t.templateApplied

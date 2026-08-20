@@ -1,7 +1,13 @@
-import type { WikiGenerationPlan, WikiProfile } from "../../shared/contracts.js";
+import { normalizeEntityTypes, type WikiGenerationPlan, type WikiProfile } from "../../shared/contracts.js";
 import type { CorpusSample } from "../services/wiki-planning-service.js";
 
 const outputLanguage = (profile: WikiProfile) => profile.outputLanguage === "zh" ? "Simplified Chinese (简体中文)" : "English";
+const requestedTypeContract = (profile: WikiProfile) => {
+  const types = normalizeEntityTypes(profile.entityTypes);
+  return types.length
+    ? `STRICT USER TYPE CONTRACT: the only allowed top-level Wiki types are exactly ${JSON.stringify(types)} in this order. Do not add, remove, rename, merge, split, translate, or infer any other type. Every entity must use exactly one of these labels.`
+    : "OPEN TYPE CONTRACT: the user did not provide any types; infer a minimal ontology from the objective and corpus.";
+};
 
 // Shared vocabulary so every stage speaks the same taxonomy language without re-listing it.
 const CATEGORY_ROLES = "law, theorem, theory, model, concept, method, formula, quantity, experiment, phenomenon, person, material, other";
@@ -27,6 +33,7 @@ USER OBJECTIVE
 - Domain: ${profile.domain}
 - Important information: ${profile.importantFields.join(", ") || "not explicitly specified"}
 - Requested entity types: ${profile.entityTypes.join(", ") || "not explicitly specified"}
+- Type contract: ${requestedTypeContract(profile)}
 - Preferred relations: ${profile.preferredRelations.join(", ") || "not explicitly specified"}
 - Exclude: ${profile.exclude.join(", ") || "nothing explicitly excluded"}
 - Preset mode: ${profile.preset ?? "auto"} (when auto, infer the best mode from the objective and corpus)
@@ -56,7 +63,7 @@ ${JSON.stringify(samples)}
 // ---------------------------------------------------------------------------
 
 export const generationPlanSystemPrompt = (profile: WikiProfile) =>
-  `You design a minimal, task-oriented Wiki classification plan from a validated user profile and prior corpus analyses. Return JSON only in ${outputLanguage(profile)}. Do not invent topics absent from both the objective and the analyses.`;
+  `You design a minimal, task-oriented Wiki classification plan from a validated user profile and prior corpus analyses. Return JSON only in ${outputLanguage(profile)}. Do not invent topics absent from both the objective and the analyses. ${requestedTypeContract(profile)}`;
 
 export const generationPlanPrompt = (profile: WikiProfile, analyses: unknown[]) => `
 Create the controlled classification plan that every later extraction and classification must follow. First synthesize all corpus analyses into one global view; do not let the first analysis, the most frequent document, or isolated terminology dominate the plan.
@@ -71,6 +78,8 @@ ${JSON.stringify({
   costPreference: profile.costPreference ?? "balanced",
 })}
 
+${requestedTypeContract(profile)}
+
 CORPUS ANALYSES
 ${JSON.stringify(analyses)}
 
@@ -80,13 +89,14 @@ Design principles:
 - Match the ontology to the actual task: courses need concepts/formulas/derivations; literature reviews need claims/methods/conflicts; experiments need sample/condition/observation; policy needs clauses/scope/exceptions; technical docs need components/interfaces/dependencies. Do not force a course ontology onto other modes.
 - Treat requiredKnowledge as a coverage contract: every item must be representable by at least one category, field, or relation rule. Also verify that the plan can represent definitions, mechanisms, conditions, comparisons, exceptions, conflicting findings, and quantitative results when the corpus and objective require them.
 - Categories must be exhaustive enough for the goal-relevant corpus yet remain abstract and reusable. Prefer a broad stable category plus precise entity properties over many narrow or corpus-specific categories.
+- When the STRICT USER TYPE CONTRACT is present, output the categories field with exactly the supplied labels, exactly once each, preserving their order. Corpus suggestions may refine definitions/examples and contribute fields or relations, but must never create or remove a category.
 
 Category roles (${CATEGORY_ROLES}):
 - Named laws/rules → law; theorems → theorem; theories → theory; models → model; methods/algorithms → method; standalone equations/expressions → formula; measurable quantities/metrics → quantity; experiments/tests → experiment; named phenomena/effects → phenomenon; people → person; materials → material; otherwise other.
 - A law that contains an equation stays a law, not a formula. Do not create overlapping synonyms (for example both "principle" and "law" for the same class).
 
 Return: corpusSummary, themes, requiredKnowledge, categories, relationTypes, classificationRules, detectedPreset, unitOfAnalysis, targetQuestions, fieldRules, relationRules, and qualityPolicy.
-- categories: each with id (short stable ASCII identifier), label, role, definition, inclusionExamples, exclusionExamples. Every item in USER OBJECTIVE.entityTypes must appear as a top-level category with the same label.
+- categories: each with id (short stable ASCII identifier), label, role, definition, inclusionExamples, exclusionExamples. Under a strict contract, the labels must exactly equal the user-supplied list; every other category label is invalid.
 - classificationRules: a short list of testable, meaning-based rules that resolve real ambiguities found in this corpus. Rules must use definition, function, evidence context, and relation role rather than name suffixes alone.
 - fieldRules: the smallest sufficient structured fields; each with id, label, description, priority (critical/high/medium), valueType, unitRequired, evidenceRequired.
 - relationRules: a semantic whitelist; each with id, label, definition, allowedSourceCategoryIds, allowedTargetCategoryIds, symmetric, requiresConditions, allowInferred. Category ids must exist above. Never use a generic "related_to" — co-occurrence is retrieval metadata, not a graph claim. An empty user relation list still requires evidence-supported relations.
@@ -145,6 +155,8 @@ export const extractionPrompt = (
 ) => `
 Work in four passes over the complete supplied batch. Perform the passes internally and return only entities and relations in the requested JSON shape.
 
+${requestedTypeContract(profile)}
+
 PASS 1 — UNDERSTAND THE WHOLE: read every supplied block in document, page, section, and block order before extracting anything. Use the corpus summary, themes, requiredKnowledge, and target questions as a global map. Reconstruct the passage-level argument: what is being defined or studied, how it works, under which conditions, what evidence or result is reported, and how it connects to earlier or later blocks. Resolve pronouns, abbreviations, symbols, and locally implicit subjects from context when the supplied evidence allows it.
 
 PASS 2 — BUILD A KNOWLEDGE INVENTORY: enumerate the goal-relevant reusable subjects and supported relations across the whole batch. Include central concepts plus evidence-backed methods, mechanisms, materials, quantities, formulas, experiments, phenomena, conditions, limitations, exceptions, negative results, and conflicting findings when relevant. Do not output the inventory separately.
@@ -174,6 +186,7 @@ Entities — one per meaningful, reusable knowledge subject:
 - name: the clearest user-facing name grounded in the corpus. canonicalName: a concise, normalized, domain-standard identity suitable for reuse across documents. Prefer an established term over a generated descriptive phrase; preserve formulas, chemical notation, capitalization, and qualifiers that distinguish the item. Never use a full sentence or verbose relation statement as a name.
 - aliases: genuine alternate names, abbreviations, translations, spelling variants, or notation variants found in the supplied text; do not use related concepts as aliases.
 - type: your best-guess category label from the plan. It is only a hint — a later step re-classifies with fuller context.
+- Under the STRICT USER TYPE CONTRACT, the type field must be copied exactly from one of the user labels; never emit a semantic role, corpus topic, or new label.
 - summary: synthesize what the subject is, its role or mechanism, and its stated scope in 1-3 concise sentences. Generalize across its supporting blocks without exceeding them; do not copy a passage, list disconnected facts, or silently turn an inference into a reported fact.
 - properties: useful structured facts (definitions, formulas, conditions, quantities, units), prioritizing the plan's critical/high field rules and preserving the unit-of-analysis boundary. Keep conditions and units attached to the facts they qualify.
 - importance (0-1) + importanceReason: why this matters to the goal.
@@ -212,6 +225,8 @@ export const classificationPrompt = (
 ) => `
 Classify each entity in three steps. Perform all steps internally before returning JSON.
 
+${requestedTypeContract(profile)}
+
 STEP 1 — UNDERSTAND IN FULL CONTEXT: read every entity in the supplied batch before classifying any of them. Reconstruct what each entity actually is from its summary, properties, all supplied source passages (including document/page/section role), and its incoming/outgoing relations. Use the corpus-level purpose and compare neighboring entities to distinguish a subject from its formula, measurement, method, experiment, result, or property. The name and proposedType are weak hints only and must never decide the category by themselves.
 
 STEP 2 — COMPARE ALL CATEGORIES: test the entity against every controlled category's definition, inclusion examples, exclusion examples, and classification rules. Classify by semantic identity and function in this corpus, not by keyword overlap, prominence, or mathematical appearance. Select the single most specific category that is directly supported; use a broader safe category when the evidence cannot establish a narrower identity.
@@ -220,6 +235,7 @@ STEP 3 — CONSISTENCY AUDIT: compare the decision with semantically similar ent
 
 Return one classification per entity with:
 - entityName and categoryId (exactly one id from the controlled categories);
+- Under the STRICT USER TYPE CONTRACT, categoryId must resolve to exactly one of the user-supplied labels and no other category may be proposed.
 - semanticRole: the role of the chosen category;
 - confidence: 0 to 1;
 - explicitIdentity: whether the SOURCE EVIDENCE explicitly identifies the item as this kind of thing;

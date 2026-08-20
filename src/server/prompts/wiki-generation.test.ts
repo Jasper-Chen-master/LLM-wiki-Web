@@ -73,6 +73,22 @@ describe("Wiki generation prompts", () => {
     expect(prompt).toContain("rather than name suffixes alone");
   });
 
+  it("instructs every generation stage to preserve a non-empty comma-separated type list exactly", () => {
+    const strictProfile = { ...profile, entityTypes: ["样品, 材料, 工艺"] };
+    const planning = generationPlanPrompt(strictProfile, [{ corpusSummary: plan.corpusSummary }]);
+    const extraction = extractionPrompt(strictProfile, plan, [{ blockId: "b-1", text: "样品采用某工艺制备。" }]);
+    const classification = classificationPrompt(strictProfile, plan, [{ name: "样品A", summary: "一个样品。" }]);
+
+    for (const prompt of [planning, extraction, classification]) {
+      expect(prompt).toContain("STRICT USER TYPE CONTRACT");
+      expect(prompt).toContain('["样品","材料","工艺"]');
+      expect(prompt).toContain("Do not add, remove, rename, merge, split, translate, or infer any other type");
+    }
+    expect(planning).toContain("must never create or remove a category");
+    expect(extraction).toContain("type field must be copied exactly");
+    expect(classification).toContain("no other category may be proposed");
+  });
+
   it("builds consolidated, canonical, information-rich nodes and audits every input block", () => {
     const prompt = extractionPrompt(profile, plan, [
       { blockId: "a-3", documentId: "paper-a", page: 3, section: "制备", blockType: "paragraph", text: "LFP 使用固相法制备。" },

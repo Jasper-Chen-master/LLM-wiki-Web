@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DocumentBlock, WikiGenerationPlan, WikiProfile } from "../../shared/contracts.js";
+import { normalizeEntityTypes, WikiProfileSchema, type DocumentBlock, type WikiGenerationPlan, type WikiProfile } from "../../shared/contracts.js";
 import {
   applyPlannedEntityTypes,
   fallbackGenerationPlan,
@@ -174,10 +174,34 @@ describe("Wiki generation planning", () => {
       relationTypes: [], requiredKnowledge: [],
     }, academicProfile);
     expect(generated.categories.map(category => category.label)).toEqual([
-      "概念", "方法", "理论", "实验", "指标", "公式", "定律",
+      "概念", "方法", "理论", "实验", "指标", "公式",
     ]);
     expect(generated.relationTypes).toEqual(academicProfile.preferredRelations);
     expect(generated.requiredKnowledge).toEqual(academicProfile.importantFields);
+  });
+
+  it("treats comma-separated user types as an exact closed category contract", () => {
+    expect(normalizeEntityTypes([" 样品, 材料 ", "工艺，样品", "", "材料"])).toEqual(["样品", "材料", "工艺"]);
+    expect(WikiProfileSchema.parse({ ...academicProfile, entityTypes: ["样品, 材料", "工艺"] }).entityTypes)
+      .toEqual(["样品", "材料", "工艺"]);
+
+    const strict = normalizeGenerationPlan({
+      ...plan("zh"),
+      categories: [
+        ...plan("zh").categories,
+        { id: "law", label: "定律", role: "law", definition: "AI suggestion", inclusionExamples: [], exclusionExamples: [] },
+      ],
+    }, {
+      ...academicProfile,
+      entityTypes: [" 样品, 材料 ", "工艺，样品"],
+    });
+    expect(strict.entityTypePolicy).toBe("strict");
+    expect(strict.categories.map(category => category.label)).toEqual(["样品", "材料", "工艺"]);
+
+    const before = strict.categories.map(category => category.label);
+    const [entity] = applyPlannedEntityTypes(strict, [{ name: "牛顿第一定律", type: "定律" }]);
+    expect(entity.type).toBe("样品");
+    expect(strict.categories.map(category => category.label)).toEqual(before);
   });
 
   it("classifies specific topics as entities under broad user categories", () => {
