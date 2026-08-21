@@ -1206,19 +1206,27 @@ function Overview({
     </>
   );
 }
-function highlightEvidence(text: string, term: string): string {
+function highlightEvidence(text: string, terms: string[] | string): string {
   if (!text) return "";
   const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  if (!term) return escaped;
-  const tokens = term
-    .split(/\s+/)
+  const tokens = (Array.isArray(terms) ? terms : [terms])
+    .flatMap((term) => term.split(/\s+/))
     .filter(Boolean)
-    .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  if (!tokens.length) return escaped;
-  const pattern = tokens.join("|");
+    .map((token) =>
+      token
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+    );
+  const uniqueTokens = [...new Set(tokens)].sort(
+    (left, right) => right.length - left.length,
+  );
+  if (!uniqueTokens.length) return escaped;
+  const pattern = uniqueTokens.join("|");
   return escaped.replace(new RegExp(`(${pattern})`, "gi"), "<mark>$1</mark>");
 }
 function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
@@ -1518,7 +1526,7 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                         dangerouslySetInnerHTML={{
                           __html: highlightEvidence(
                             item.originalText,
-                            selected.displayName,
+                            [selected.displayName, ...selected.aliases],
                           ),
                         }}
                       />
