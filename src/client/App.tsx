@@ -1206,34 +1206,19 @@ function Overview({
     </>
   );
 }
-function highlightEvidence(text: string, terms: string[] | string): string {
-  if (!text) return "";
-  const escaped = text
+function escapeHtml(text: string): string {
+  return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  const tokens = (Array.isArray(terms) ? terms : [terms])
-    .flatMap((term) => term.split(/\s+/))
-    .filter(Boolean)
-    .map((token) =>
-      token
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-    );
-  const uniqueTokens = [...new Set(tokens)].sort(
-    (left, right) => right.length - left.length,
-  );
-  if (!uniqueTokens.length) return escaped;
-  const pattern = uniqueTokens.join("|");
-  return escaped.replace(new RegExp(`(${pattern})`, "gi"), "<mark>$1</mark>");
 }
 function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
   const { t, lang } = useI18n();
   const [selected, setSelected] = useState<WikiNode | undefined>(
     snapshot.nodes[0],
   );
+  const [focus, setFocus] = useState<Record<string, { snippet: string | null; loading: boolean }>>({});
+  const focusRef = useRef(focus);
   const [query, setQuery] = useState(""),
     [type, setType] = useState("all");
   const [zoom, setZoom] = useState(1),
@@ -1271,6 +1256,51 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
   const evidence = selected
     ? snapshot.evidence.filter((item) => selected.evidenceIds.includes(item.id))
     : [];
+  useEffect(() => {
+    const evidenceIds = selected?.evidenceIds ?? [];
+    const missing = evidenceIds.filter(id => !(id in focusRef.current));
+    if (!missing.length) return;
+
+    const controller = new AbortController();
+    let mounted = true;
+    const pending = Object.fromEntries(missing.map(id => [id, { snippet: null, loading: true }]));
+    focusRef.current = { ...focusRef.current, ...pending };
+    setFocus(current => ({ ...current, ...pending }));
+    void (async () => {
+      await Promise.all(missing.map(async evidenceId => {
+        try {
+          const response = await fetch(`/api/projects/${snapshot.project.id}/evidence/focus`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ evidenceId }),
+            signal: controller.signal,
+          });
+          const payload: unknown = await response.json();
+          const snippet = typeof (payload as { snippet?: unknown }).snippet === "string"
+            ? (payload as { snippet: string }).snippet.trim() || null
+            : null;
+          if (mounted) {
+            const entry = { snippet, loading: false };
+            focusRef.current = { ...focusRef.current, [evidenceId]: entry };
+            setFocus(current => ({ ...current, [evidenceId]: entry }));
+          }
+        } catch {
+          const entry = { snippet: null, loading: false };
+          focusRef.current = { ...focusRef.current, [evidenceId]: entry };
+          if (mounted) {
+            setFocus(current => ({ ...current, [evidenceId]: entry }));
+          }
+        }
+      }));
+    })();
+    return () => {
+      mounted = false;
+      controller.abort();
+      const nextFocus = { ...focusRef.current };
+      for (const evidenceId of missing) delete nextFocus[evidenceId];
+      focusRef.current = nextFocus;
+    };
+  }, [selected?.id, selected?.evidenceIds, snapshot.project.id]);
   const docNames = useMemo(
     () => new Map(snapshot.documents.map((d) => [d.id, d.fileName])),
     [snapshot.documents],
@@ -1522,14 +1552,9 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                         <span className="evidence-page">{lang === "zh" ? `第 ${item.page} 页` : `${t.page} ${item.page}`}</span>
                         <span className="evidence-status">{item.status === "observed" ? t.observed : item.status === "inferred" ? t.inferred : t.reported}</span>
                       </header>
-                      <p
-                        dangerouslySetInnerHTML={{
-                          __html: highlightEvidence(
-                            item.originalText,
-                            [selected.displayName, ...selected.aliases],
-                          ),
-                        }}
-                      />
+                      <p dangerouslySetInnerHTML={{
+                        __html: escapeHtml(focus[item.id]?.snippet || item.originalText),
+                      }} />
                       <small>{item.section ?? item.blockId}</small>
                     </article>
                   ))

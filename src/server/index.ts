@@ -6,14 +6,16 @@ import multer from "multer";
 import path from "node:path";
 import { stat, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { CreateProjectSchema, UpdateProfileSchema, type DocumentRecord, type ProjectSnapshot } from "../shared/contracts.js";
 import { rememberPresetProfile } from "../shared/preset-profiles.js";
 import { Store } from "./store.js";
 import { recoverInterruptedJobs, runProjectJob } from "./job-runner.js";
 import { removeDocumentKnowledge } from "./services/graph-service.js";
 import { parseDocumentFile } from "./document-parser.js";
-import { profileFromText } from "./llm-provider.js";
+import { createLLMProvider, profileFromText } from "./llm-provider.js";
 import { createChatRouter, chatErrorStatus } from "./routes/chat-routes.js";
+import { focusEvidenceSnippet } from "./services/evidence-focus-service.js";
 
 const app = express(); const store = new Store(); await store.load(); await recoverInterruptedJobs(store);
 const uploadDir = path.resolve("uploads");
@@ -65,6 +67,7 @@ app.delete("/api/projects/:id/documents", async (req, res) => { const data = sna
 app.post("/api/projects/:id/profile/understand", async (req, res) => { const data = snapshot(String(req.params.id)); const profileDoc = data?.documents.filter(d => d.role === "profile").at(-1); if (!data || !profileDoc?.storagePath) return res.status(400).json({ error: "Upload a DOCX Research Profile first" }); try { const parsed = await parseDocumentFile(profileDoc.storagePath, "docx"); const profile = await profileFromText(parsed.blocks.map(b => b.text).join("\n")); data.project.profile = profile; data.project.presetProfiles = rememberPresetProfile(data.project.presetProfiles, profile); data.project.profileConfirmed = false; data.project.rebuildRequired = true; delete data.project.generationPlan; profileDoc.status = "parsed"; data.project.updatedAt = new Date().toISOString(); await store.save(); res.json({ profile, warnings: parsed.warnings }); } catch (error) { profileDoc.status = "failed"; profileDoc.error = error instanceof Error ? error.message : "Profile parsing failed"; await store.save(); res.status(422).json({ error: profileDoc.error }); } });
 app.post("/api/projects/:id/confirm", async (req, res) => { const data = snapshot(req.params.id); if (!data?.project.profile) return res.status(400).json({ error: "A validated Wiki Profile is required" }); data.project.profileConfirmed = true; await store.save(); const job = await runProjectJob(store, data.project.id); res.status(202).json(job); });
 app.get("/api/projects/:id/jobs/latest", (req, res) => { const projectId = String(req.params.id); if (!store.data.projects.some(project => project.id === projectId)) return res.status(404).json({ error: "Project not found" }); const job = store.data.jobs.filter(item => item.projectId === projectId).at(-1); return job ? res.json(job) : res.status(404).json({ error: "No processing job found" }); });
+app.post("/api/projects/:id/evidence/focus", async (req, res) => { const data = snapshot(String(req.params.id)); if (!data) return res.status(404).json({ error: "Project not found" }); const parsed = z.object({ evidenceId: z.string().min(1) }).safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() }); if (!data.evidence.some(item => item.id === parsed.data.evidenceId)) return res.status(404).json({ error: "Evidence not found in this project" }); try { return res.json({ snippet: await focusEvidenceSnippet(store, data.project.id, parsed.data.evidenceId, createLLMProvider()) }); } catch { return res.json({ snippet: null }); } });
 app.use("/api/projects/:id/chat", createChatRouter(store));
 app.get("/api/projects/:id/search", (req, res) => { const data = snapshot(req.params.id); if (!data) return res.status(404).json({ error: "Project not found" }); const q = String(req.query.q ?? "").toLowerCase(); const nodes = data.nodes.filter(n => [n.displayName, n.canonicalName, n.summary, ...n.aliases].join(" ").toLowerCase().includes(q)); res.json({ nodes, edges: data.edges.filter(e => nodes.some(n => n.id === e.sourceNodeId || n.id === e.targetNodeId)), evidence: data.evidence }); });
 app.get("/api/projects/:id/export/:format", (req, res) => { const data = snapshot(req.params.id); if (!data) return res.status(404).end(); if (req.params.format === "csv") { const rows = ["id,name,type,summary,confidence", ...data.nodes.map(n => [n.id, n.displayName, n.type, JSON.stringify(n.summary), n.confidence].join(","))]; res.type("text/csv").attachment(`${data.project.name}.csv`).send(rows.join("\n")); } else res.type("application/json").attachment(`${data.project.name}.json`).send(JSON.stringify(data, null, 2)); });
