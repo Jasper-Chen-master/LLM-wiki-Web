@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { generateStructured, type LLMProvider } from "../llm-provider.js";
-import { chunksByTextBudget, mapWithConcurrency } from "./provider.js";
+import { SafePipelineProvider, chunksByTextBudget, mapWithConcurrency } from "./provider.js";
 import { z } from "zod";
+import type { DocumentBlock, WikiProfile } from "../../shared/contracts.js";
+import { fallbackGenerationPlan } from "../services/wiki-planning-service.js";
 
 describe("Wiki pipeline performance safeguards", () => {
   it("packs short page blocks by text budget instead of creating underfilled fixed batches", () => {
@@ -67,5 +69,62 @@ describe("Wiki pipeline performance safeguards", () => {
     await expect(generateStructured(provider, { prompt: "Return JSON" }, z.object({ value: z.string() }), 1))
       .resolves.toEqual({ value: "fixed" });
     expect(provider.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses one full-context classification pass without a post-classification review", async () => {
+    const profile: WikiProfile = {
+      version: "1.0", researchGoal: "Understand the source", domain: "General",
+      entityTypes: ["Concept", "Method"], importantFields: [], preferredRelations: [], exclude: [],
+      extractNumericData: true, preserveUnits: true, extractTables: false, evidenceRequired: true,
+      notes: "", outputLanguage: "en",
+    };
+    const blocks: DocumentBlock[] = [{
+      id: "block-1", documentId: "doc-1", page: 1, blockType: "paragraph",
+      sourceLocation: "page 1", text: "Alpha is an operational workflow used to prepare the source material.",
+    }];
+    const provider: LLMProvider = {
+      generate: vi.fn(async request => {
+        if (request.system?.startsWith("你负责提取仅由所提供文档块")) {
+          return { provider: "test", text: JSON.stringify({
+            entities: [{ name: "Alpha", type: "Concept", summary: "A reusable workflow.", evidenceIds: ["block-1"] }],
+            relations: [],
+          }) };
+        }
+        if (request.system?.startsWith("你负责重建 Wiki 节点的")) {
+          return { provider: "test", text: JSON.stringify({ interpretations: [{
+            entityName: "Alpha",
+            semanticIdentity: "An operational workflow for preparing source material",
+            semanticExplanation: "The source presents Alpha as a reusable workflow for preparation.",
+            decisionFactors: ["The passage calls Alpha an operational workflow", "Its purpose is preparation"],
+            identityEvidence: "Alpha is an operational workflow used to prepare the source material.",
+            confidence: .94,
+            reason: "The source directly states its identity and purpose.",
+          }] }) };
+        }
+        if (request.system?.startsWith("你负责对有证据支持的 Wiki 节点")) {
+          return { provider: "test", text: JSON.stringify({ classifications: [{
+            entityName: "Alpha", categoryId: "method", confidence: .94,
+            reason: "The complete source context describes an operational workflow.",
+          }] }) };
+        }
+        throw new Error(`Unexpected pipeline stage: ${request.system}`);
+      }),
+    };
+    const phases: string[] = [];
+    const extraction = await new SafePipelineProvider(provider).extractKnowledge(
+      profile,
+      fallbackGenerationPlan(profile, blocks),
+      blocks,
+      update => { phases.push(update.phase); },
+    );
+
+    expect(extraction.entities).toHaveLength(1);
+    expect(extraction.entities[0].type).toBe("Method");
+    expect(extraction.entities[0].classification?.status).toBe("accepted");
+    expect(extraction.entities[0].classification?.source).toBe("llm");
+    expect(extraction.entities[0].classification?.semanticIdentity).toContain("workflow");
+    expect(phases).toContain("semantic_interpretation");
+    expect(phases).toContain("classification");
+    expect(phases).not.toContain("classification_review");
   });
 });

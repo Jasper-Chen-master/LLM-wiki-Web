@@ -10,9 +10,9 @@ DeepSeek is accessed only through `LLMProvider`. Missing configuration activates
 
 ## 2026-08-17 — Analyze the corpus before defining Wiki categories
 
-Entity types are no longer free-form extraction output. Each build first analyzes distributed samples from every current source together with the approved Research Profile, then creates and validates a persisted `WikiGenerationPlan`. Relevance filtering and extraction receive this plan. A separate global AI classification pass reviews all extracted entities against the same controlled categories, after which a deterministic post-validator maps all provider output back to plan labels.
+Entity types are no longer free-form extraction output. Each build first analyzes distributed samples from every current source together with the approved Research Profile, then creates and validates a persisted `WikiGenerationPlan`. Relevance filtering and extraction receive this plan. Each canonical node is first understood from its full evidence context, then one controlled AI classification pass maps that understanding to a permitted plan category; malformed responses fall back to the extracted controlled label.
 
-This staged design costs additional model calls, but it improves classification consistency, makes the active ontology auditable, and prevents obvious semantic drift. Deterministic guardrails validate evidence and controlled categories, while semantic identity is decided from contextual AI analysis. Named examples such as Newton's laws are regression fixtures, not a name-only taxonomy. If final plan generation fails validation, the system conservatively combines categories from the successful corpus analyses rather than reverting to unrestricted types.
+This staged design keeps planning and extraction evidence-aware without adding a second classification/review loop. Structured-output and controlled-category checks remain deterministic guardrails; the model must read and reconstruct the complete node context before selecting a label. Named examples such as Newton's laws are regression fixtures, not a name-only taxonomy. If final plan generation fails validation, the system conservatively combines categories from the successful corpus analyses rather than reverting to unrestricted types.
 
 ## 2026-08-17 — User knowledge types outrank corpus themes
 
@@ -28,7 +28,7 @@ One project can have only one active in-process build. Unchanged profiles retain
 
 Progress percentages are based on completed LLM batches, with a separate heartbeat elapsed time for the currently active sub-stage. Time alone must not advance the percentage because it makes a job appear almost complete while one slow request is still outstanding. `ProcessingJob.batchProgress` is an optional shared contract so old persisted jobs remain readable.
 
-Provider transport retry and structured-output repair are deliberately independent. Network failures propagate after the provider's bounded retry policy; only a response that was actually received but fails local JSON/Zod validation enters the repair prompt. This removes multiplicative waits while retaining schema validation and repair quality. Entity classification remains a global validation pass, but canonical duplicates are collapsed before that pass to avoid paying repeatedly for the same classification decision.
+Provider transport retry and structured-output repair are deliberately independent. Network failures propagate after the provider's bounded retry policy; only a response that was actually received but fails local JSON/Zod validation enters the repair prompt. This removes multiplicative waits while retaining schema validation and repair quality. Canonical duplicates are collapsed before the single classification pass so each reusable node is classified once.
 
 ## 2026-08-18 — Use adaptive task contracts instead of a universal course ontology
 
@@ -55,38 +55,22 @@ Each completed revision receives a deterministic quality report. Quality warning
 without silently deleting supported knowledge. This creates the validation boundary required for
 selective repair and regression comparison in later iterations.
 
-## 2026-08-18 — Classification is a reviewed decision, not a model label
+## 2026-08-18 — Classification uses the complete node context
 
-The global classifier now returns an auditable proposal containing a controlled category,
-semantic role, confidence, alternatives, ambiguity state, and a short source identity excerpt.
-The server verifies that the excerpt occurs in the supplied evidence. Named laws, theorems, and
-theories require positive identity evidence; importance, mathematical equality, or rate-of-change
-structure is insufficient. Therefore a generic “X 与 Y 变化率关系” cannot become a law merely
-because the model assigns that label. It safely falls back to formula or concept and records the
-correction.
-
-Only contradictory, low-confidence, or ambiguous proposals receive a second independent LLM
-review. This follows the analyze-then-generate and asynchronous-review ideas demonstrated by
-`nashsu/llm_wiki` without copying its free-form file model. Canonical deduplication occurs before
-classification, so the additional quality check is selective rather than a full second pass.
-
-`WikiNode.classification` persists the final decision. The UI shows each node's decision status
-and rationale, making automatic correction and remaining uncertainty observable without turning
-the Wiki into a single aggregate score.
+`WikiNode.type` is the normalized label from the controlled plan. Before choosing it, a dedicated
+understanding prompt receives the node summary, properties, source passages with locations,
+relation neighborhood, and research goal. The classifier then receives that understanding plus the
+original evidence and category definitions. The server validates the returned JSON and category
+identifier, but does not run a second classification review loop. If the response is unavailable
+or malformed, the node keeps its exact extracted controlled label.
 
 ## 2026-08-18 — Entity names are hints, not classification authority
 
-Classification now receives the entity's cited passages, page and section locations, summary,
-properties, extracted relation neighborhood, corpus themes, controlled category definitions, and
-research goal. The model must produce a semantic explanation, concrete decision factors, and
-counter-evidence before selecting a category. Extraction-written types and entity names are weak
-signals because either may be generated incorrectly.
-
-A name-derived category is never accepted without contextual AI support. A conflict between the
-name and the semantic proposal triggers the independent review pass. A high-confidence reviewed
-conclusion may override a misleading name, while named laws, theorems, and theories still require
-a source excerpt that explicitly establishes that identity. If AI classification is unavailable,
-surface-based fallbacks remain marked for review rather than being presented as verified facts.
+The classifier must reconstruct the node's central subject, function, scope, and evidence from
+that complete context before comparing it with every controlled category. A name, extracted type,
+formula-looking content, or neighboring node is only a clue and cannot replace the source meaning.
+Missing or malformed output uses the already extracted controlled label; it is not sent to another
+worker and does not create a review warning.
 
 ## 2026-08-20 — Comprehension precedes extraction and classification
 
@@ -94,11 +78,13 @@ Wiki generation uses hierarchical whole-context understanding rather than isolat
 
 Extraction performs an internal knowledge inventory, canonical consolidation, and coverage audit before returning structured output. Nodes represent reusable knowledge subjects rather than paragraphs, sentences, headings, or incidental properties; repeated names and notation variants are consolidated as aliases, while independently meaningful subjects remain separate. Coverage includes supported conditions, limitations, exceptions, negative results, and disagreements, but never permits unsupported nodes merely to satisfy a checklist.
 
-Classification compares every entity against all controlled category definitions and corpus-specific rules, then audits consistency across comparable entities. This strengthens semantic consistency without weakening the existing evidence validation, controlled-category enforcement, or selective independent review boundary.
+Classification compares the reconstructed meaning in the complete node context against all
+controlled category definitions and corpus-specific rules. This keeps category selection
+domain-neutral while preserving evidence binding and the user's closed type contract.
 
 ## 2026-08-20 — Non-empty user type lists are closed contracts
 
-The Research Profile UI accepts knowledge types as comma-separated labels. Server-side profile normalization splits ASCII and Chinese commas, trims whitespace, preserves order, and removes duplicates. A non-empty result sets `WikiGenerationPlan.entityTypePolicy` to `strict`: planning, extraction, classification, and deterministic post-processing may use only those exact labels, and corpus-derived categories cannot be added or removed. An empty list remains `open` so automatic/custom Wikis can infer a reusable ontology from the corpus.
+The Research Profile UI accepts knowledge types as comma-separated labels. Server-side profile normalization splits ASCII and Chinese commas, trims whitespace, preserves order, and removes duplicates. A non-empty result sets `WikiGenerationPlan.entityTypePolicy` to `strict`: planning, extraction, classification, and deterministic post-processing may use only those exact labels, and corpus-derived categories cannot be added or removed. The planning worker may enrich the matching labels with corpus-specific definitions and inclusion/exclusion boundaries; it may not change the labels. An empty list remains `open` so automatic/custom Wikis can retain a reusable ontology designed from the corpus.
 
 ## 2026-08-20 — Persist edited blueprint presets per project
 
@@ -108,3 +94,39 @@ is persisted as a project-scoped override under its preset and output language. 
 preset later restores the override; custom profiles remain project profiles rather than silently
 changing a built-in template. This keeps reusable defaults stable within a research space without
 leaking one project's domain-specific edits into another project.
+
+## 2026-08-20 — Synchronize blueprint edits across open pages
+
+The server remains the source of truth, while same-origin pages use a lightweight
+`BroadcastChannel` notification after a successful profile save. A `storage` event is the
+compatibility fallback. Pages with unsaved local edits are not overwritten silently; they show a
+conflict hint and require the user to save or discard their local draft.
+
+## 2026-08-20 — Compose evidence into domain-neutral mini Wiki pages
+
+Reference-quality Wiki pages are coherent because they preserve a subject's identity, explanatory
+logic, scope, evidence, examples, boundaries, and meaningful links, not because they use a physics
+or course-specific chapter template. Corpus analysis now identifies that explanatory spine;
+relevance filtering retains blocks that fill one of those roles; extraction composes compatible
+facets into node summary, properties, and evidence-bound relations; and classification evaluates
+the page's central semantic identity rather than the format of a supporting fact. The lens adapts
+to the source: unsupported facets are omitted and user-provided type labels remain a closed
+contract when present.
+
+## 2026-08-20 — Preserve node understanding, remove only post-classification review
+
+The pipeline still treats “what is this node in this corpus?” and “which allowed category maps to
+that meaning?” as two sequential operations. Semantic interpretation continues to run first with
+the full evidence context and returns a semantic identity, explanation, decision factors, exact
+source excerpt, and confidence. The server validates each item independently so one malformed entry
+does not discard an entire batch.
+
+The controlled classifier then receives that interpretation plus the original source context and
+may only select an existing plan category. It does not invent categories or replace the source
+meaning with a name heuristic. Structured output and controlled-id validation remain in place, but
+the former independent recovery/review call and its pending status are deliberately removed.
+
+This decision keeps the system universal. Broad category roles remain persisted schema metadata
+and a fallback aid for category-plan creation, but they are not a menu of mandatory node types or
+a hard-coded way to classify instances. A strict user type list still remains exact while retaining
+the corpus-specific definitions and boundaries the planner produces for those labels.

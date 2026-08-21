@@ -5,7 +5,6 @@ import {
   fallbackGenerationPlan,
   normalizeGenerationPlan,
   representativeCorpusSample,
-  resolveEntityClassification,
 } from "./wiki-planning-service.js";
 
 const plan = (language: "en" | "zh" = "zh"): WikiGenerationPlan => normalizeGenerationPlan({
@@ -18,12 +17,12 @@ const plan = (language: "en" | "zh" = "zh"): WikiGenerationPlan => normalizeGene
   categories: [
     {
       id: "formula", label: language === "zh" ? "公式" : "Formula", role: "formula",
-      definition: language === "zh" ? "数学表达式" : "Mathematical expression",
+      definition: language === "zh" ? "可独立复用的计算或关系表达式" : "A reusable computational or relational expression",
       inclusionExamples: [], exclusionExamples: [],
     },
     {
       id: "concept", label: language === "zh" ? "概念" : "Concept", role: "concept",
-      definition: language === "zh" ? "一般概念" : "General concept",
+      definition: language === "zh" ? "具有独立定义的核心知识对象" : "A core knowledge object with an independent definition",
       inclusionExamples: [], exclusionExamples: [],
     },
   ],
@@ -58,129 +57,31 @@ describe("Wiki generation planning", () => {
     expect(fallback.relationRules).not.toHaveLength(0);
   });
 
-  it("forces Newton's three laws into the law category despite provider type drift", () => {
-    const entities = applyPlannedEntityTypes(plan("zh"), [
+  it("normalizes extracted labels without creating a classification review decision", () => {
+    const generated = plan("zh");
+    const entities = applyPlannedEntityTypes(generated, [
       { name: "牛顿第一定律", type: "概念" },
-      { name: "牛顿第二定律", type: "公式" },
-      { name: "牛顿第三定律", type: "理论" },
+      { name: "Newton's Second Law", type: "公式" },
     ]);
-    expect(entities.map(entity => entity.type)).toEqual(["定律", "定律", "定律"]);
+
+    expect(entities.map(entity => entity.type)).toEqual(["概念", "公式"]);
+    expect(entities.every(entity => !("classification" in entity))).toBe(true);
+    expect(generated.categories.map(category => category.label)).toEqual(["公式", "概念"]);
   });
 
-  it("applies general unambiguous semantic categories beyond the Newton example", () => {
-    const entities = applyPlannedEntityTypes(plan("zh"), [
-      { name: "开普勒第一定律", type: "概念" },
-      { name: "勾股定理", type: "理论" },
-      { name: "标准模型", type: "概念" },
-      { name: "有限元方法", type: "概念" },
-      { name: "薛定谔方程", type: "概念" },
-      { name: "双缝实验", type: "概念" },
-      { name: "光电效应", type: "概念" },
-    ]);
-    expect(entities.map(entity => entity.type)).toEqual([
-      "定律", "定理", "模型", "方法", "公式", "实验", "现象",
-    ]);
-  });
+  it("uses only the supplied type label and does not infer from equation-like properties", () => {
+    const [entity] = applyPlannedEntityTypes(plan("zh"), [{
+      name: "输入输出关系",
+      type: "概念",
+      summary: "描述两个量之间的关系。",
+      properties: { 表达式: "y = kx" },
+    }]);
 
-  it("does not force an ambiguous principle into the law category", () => {
-    const [entity] = applyPlannedEntityTypes(plan("zh"), [
-      { name: "惯性原理", type: "概念" },
-    ]);
     expect(entity.type).toBe("概念");
+    expect("classification" in entity).toBe(false);
   });
 
-  it("does not classify a rate-of-change relationship as a law", () => {
-    const [entity] = applyPlannedEntityTypes(plan("zh"), [{
-      name: "力矩与角动量变化率关系",
-      type: "定律",
-      summary: "合外力矩等于角动量对时间的变化率。",
-      properties: { 公式: "τ_ext = dL/dt" },
-    }]);
-    expect(entity.type).toBe("公式");
-    expect(entity.classification.status).toBe("corrected");
-  });
-
-  it("requires verified source identity before accepting an AI law proposal", () => {
-    const generated = plan("zh");
-    applyPlannedEntityTypes(generated, [{ name: "示例命名定律", type: "概念" }]);
-    const entity = {
-      name: "输入与输出变化率关系",
-      summary: "描述两个量之间的导数关系。",
-      properties: { 表达式: "dy/dt = kx" },
-    };
-    const rejected = resolveEntityClassification(generated, entity, {
-      categoryId: "law", semanticRole: "law", confidence: .98, explicitIdentity: true,
-      identityEvidence: "这是一个定律", identityEvidenceVerified: false,
-      reason: "模型认为它很重要", source: "llm",
-    });
-    expect(rejected.category.role).toBe("formula");
-    expect(rejected.decision.status).toBe("corrected");
-  });
-
-  it("does not accept a category from the entity name alone", () => {
-    const [entity] = applyPlannedEntityTypes(plan("zh"), [{
-      name: "示例响应定律", type: "概念", summary: "尚无足够上下文。",
-    }]);
-    expect(entity.type).toBe("定律");
-    expect(entity.classification.status).toBe("needs_review");
-    expect(entity.classification.source).toBe("lexical");
-  });
-
-  it("allows independently reviewed semantic context to override a misleading name", () => {
-    const generated = plan("zh");
-    applyPlannedEntityTypes(generated, [{ name: "示例响应定律", type: "概念" }]);
-    const resolved = resolveEntityClassification(generated, {
-      name: "客户增长定律",
-      summary: "公司内部用于计算客户同比增长率的表达式，并非被报告为经验定律。",
-      properties: { 计算公式: "(current - previous) / previous" },
-    }, {
-      categoryId: "formula", semanticRole: "formula", confidence: .93,
-      explicitIdentity: false, identityEvidenceVerified: false,
-      semanticExplanation: "这是一个计算指标变化率的表达式。",
-      decisionFactors: ["属性提供明确计算公式", "原文未将其作为定律报告"],
-      reason: "定义、用途和属性均符合公式类别。", source: "review",
-    });
-    expect(resolved.category.role).toBe("formula");
-    expect(resolved.decision.status).toBe("accepted");
-    expect(resolved.decision.semanticExplanation).toContain("表达式");
-  });
-
-  it("applies the same semantic guard outside course Wikis", () => {
-    const businessPlan = normalizeGenerationPlan({
-      ...plan("zh"), detectedPreset: "business", researchGoal: "分析客户经营指标",
-    }, {
-      ...academicProfile, preset: "business", researchGoal: "分析客户经营指标",
-      entityTypes: ["概念", "指标", "公式", "定律"],
-    });
-    const [entity] = applyPlannedEntityTypes(businessPlan, [{
-      name: "客户流失率与价格变化关系", type: "定律",
-      summary: "描述价格变化与客户流失率之间的统计关系。",
-      properties: { 计算公式: "churn = lost / total" },
-    }]);
-    expect(entity.type).toBe("公式");
-    expect(entity.classification.semanticRole).toBe("formula");
-  });
-
-  it("keeps user-requested types and rejects corpus entities as top-level categories", () => {
-    const generated = normalizeGenerationPlan({
-      ...plan("zh"),
-      categories: [
-        { id: "centripetal-acceleration", label: "向心加速度", role: "quantity", definition: "主题", inclusionExamples: [], exclusionExamples: [] },
-        { id: "law", label: "定律", role: "law", definition: "通用类别", inclusionExamples: [], exclusionExamples: [] },
-        { id: "wave", label: "波", role: "concept", definition: "主题", inclusionExamples: [], exclusionExamples: [] },
-        { id: "wave-equation", label: "波动方程", role: "formula", definition: "实体", inclusionExamples: [], exclusionExamples: [] },
-        { id: "dimensional-analysis", label: "量纲分析", role: "method", definition: "实体", inclusionExamples: [], exclusionExamples: [] },
-      ],
-      relationTypes: [], requiredKnowledge: [],
-    }, academicProfile);
-    expect(generated.categories.map(category => category.label)).toEqual([
-      "概念", "方法", "理论", "实验", "指标", "公式",
-    ]);
-    expect(generated.relationTypes).toEqual(academicProfile.preferredRelations);
-    expect(generated.requiredKnowledge).toEqual(academicProfile.importantFields);
-  });
-
-  it("treats comma-separated user types as an exact closed category contract", () => {
+  it("keeps comma-separated user types exact while preserving AI-planned category meanings", () => {
     expect(normalizeEntityTypes([" 样品, 材料 ", "工艺，样品", "", "材料"])).toEqual(["样品", "材料", "工艺"]);
     expect(WikiProfileSchema.parse({ ...academicProfile, entityTypes: ["样品, 材料", "工艺"] }).entityTypes)
       .toEqual(["样品", "材料", "工艺"]);
@@ -188,52 +89,64 @@ describe("Wiki generation planning", () => {
     const strict = normalizeGenerationPlan({
       ...plan("zh"),
       categories: [
-        ...plan("zh").categories,
-        { id: "law", label: "定律", role: "law", definition: "AI suggestion", inclusionExamples: [], exclusionExamples: [] },
+        { id: "sample", label: "样品", role: "material", definition: "在当前研究中按批次、处理条件或来源区分的受检对象。", inclusionExamples: ["样品批次"], exclusionExamples: ["材料的一般定义"] },
+        { id: "material", label: "材料", role: "material", definition: "具有可复用组成或结构身份的研究对象。", inclusionExamples: ["主体材料"], exclusionExamples: ["单个测试批次"] },
+        { id: "process", label: "工艺", role: "method", definition: "改变研究对象状态或性质的可重复步骤序列。", inclusionExamples: ["处理步骤"], exclusionExamples: ["结果指标"] },
+        { id: "forbidden", label: "额外类别", role: "other", definition: "不应保留", inclusionExamples: [], exclusionExamples: [] },
       ],
     }, {
       ...academicProfile,
       entityTypes: [" 样品, 材料 ", "工艺，样品"],
     });
+
     expect(strict.entityTypePolicy).toBe("strict");
     expect(strict.categories.map(category => category.label)).toEqual(["样品", "材料", "工艺"]);
-
-    const before = strict.categories.map(category => category.label);
-    const [entity] = applyPlannedEntityTypes(strict, [{ name: "牛顿第一定律", type: "定律" }]);
-    expect(entity.type).toBe("样品");
-    expect(strict.categories.map(category => category.label)).toEqual(before);
-  });
-
-  it("classifies specific topics as entities under broad user categories", () => {
-    const generated = fallbackGenerationPlan(academicProfile, []);
-    const entities = applyPlannedEntityTypes(generated, [
-      { name: "向心加速度", type: "向心加速度" },
-      { name: "波", type: "波" },
-      { name: "波动方程", type: "波动方程" },
-      { name: "量纲分析", type: "量纲分析" },
+    expect(strict.categories.map(category => category.definition)).toEqual([
+      "在当前研究中按批次、处理条件或来源区分的受检对象。",
+      "具有可复用组成或结构身份的研究对象。",
+      "改变研究对象状态或性质的可重复步骤序列。",
     ]);
-    expect(entities.map(entity => entity.type)).toEqual(["指标", "概念", "公式", "方法"]);
+    expect(strict.categories[0].inclusionExamples).toEqual(["样品批次"]);
   });
 
-  it("builds a fallback ontology directly from the user's requested knowledge types", () => {
-    const generated = fallbackGenerationPlan(academicProfile, []);
-    expect(generated.categories.map(category => category.label)).toEqual([
-      "概念", "方法", "理论", "实验", "指标", "公式",
+  it("never adds categories during extraction, even in an open plan", () => {
+    const generated = normalizeGenerationPlan({
+      ...plan("zh"),
+      categories: [
+        { id: "claim", label: "主张", role: "other", definition: "有证据支持、可被检验的陈述。", inclusionExamples: [], exclusionExamples: [] },
+        { id: "constraint", label: "约束", role: "other", definition: "限定主张适用范围的条件。", inclusionExamples: [], exclusionExamples: [] },
+      ],
+    });
+    const before = generated.categories.map(category => category.id);
+    applyPlannedEntityTypes(generated, [{ name: "任何名称", type: "未计划类别" }]);
+
+    expect(generated.categories.map(category => category.id)).toEqual(before);
+    expect(generated.categories.map(category => category.definition)).toEqual([
+      "有证据支持、可被检验的陈述。",
+      "限定主张适用范围的条件。",
     ]);
   });
 
-  it("applies the same semantic correction to English law names", () => {
-    const [entity] = applyPlannedEntityTypes(plan("en"), [
-      { name: "Newton's Second Law", type: "Formula" },
-    ]);
-    expect(entity.type).toBe("Law");
+  it("keeps arbitrary user labels as the exact controlled type", () => {
+    const strict = fallbackGenerationPlan({
+      ...academicProfile,
+      entityTypes: ["风险信号", "治理动作", "适用边界"],
+    }, []);
+    const [entity] = applyPlannedEntityTypes(strict, [{
+      name: "某个熟悉的物理名称", type: "风险信号",
+    }]);
+
+    expect(strict.categories.map(category => category.label)).toEqual(["风险信号", "治理动作", "适用边界"]);
+    expect(entity.type).toBe("风险信号");
+    expect("classification" in entity).toBe(false);
   });
 
-  it("maps free-form provider types back to a category in the approved plan", () => {
+  it("falls back to the first controlled category when an extractor emits an unknown label", () => {
     const [entity] = applyPlannedEntityTypes(plan("zh"), [
       { name: "惯性参考系", type: "AI 自创类别" },
     ]);
-    expect(entity.type).toBe("概念");
+    expect(entity.type).toBe("公式");
+    expect("classification" in entity).toBe(false);
   });
 
   it("samples every document and includes distributed late content", () => {

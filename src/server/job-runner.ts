@@ -142,7 +142,7 @@ async function processJob(store: Store, job: ProcessingJob) {
         }, planningWaitingUpdate("Analyzing research goal against current source content", "Planning controlled Wiki categories"));
         applyPlanToWikiNodes(project.generationPlan, store.data.nodes.filter(node => node.id.startsWith(`${job.projectId}:`)));
       }
-      await update("completed", 100, job.errors.length ? "Completed with partial document failures; no new readable source text was extracted" : "No new readable source text was extracted");
+      await update("completed", 100, job.errors.length ? "Completed with processing warnings; no new readable source text was extracted" : "No new readable source text was extracted");
       return;
     }
     project.generationPlan = await provider.buildGenerationPlan(project.profile, currentBlocks, async phase => {
@@ -160,9 +160,9 @@ async function processJob(store: Store, job: ProcessingJob) {
       65,
       82,
       extractingMessage,
-      { extraction: [65, 77], classification: [77, 80], classification_review: [80, 82] },
+      { extraction: [65, 74], semantic_interpretation: [74, 78], classification: [78, 82] },
     ));
-    await update("resolving", 82, "Resolving duplicate entities and validating categories");
+    await update("resolving", 82, "Resolving duplicate entities and applying controlled categories");
     const graph = buildGraph(job.projectId, extraction, relevant, project.generationPlan);
     if (rebuildAll) clearProjectGraphKnowledge(store.data, job.projectId);
     mergeGraphInto(store.data, job.projectId, graph);
@@ -172,6 +172,6 @@ async function processJob(store: Store, job: ProcessingJob) {
     await update("building_graph", 93, "Building evidence-grounded graph");
     project.rebuildRequired = false;
     project.updatedAt = new Date().toISOString();
-    await update("completed", 100, graph.nodes.length ? (job.errors.length ? "Completed with partial document failures; knowledge graph is ready." : "Knowledge graph is ready.") : "Completed, but no evidence-grounded entities were found. Refine the Research Profile or use a text-based PDF.");
+    await update("completed", 100, graph.nodes.length ? "Knowledge graph is ready." : "Completed, but no evidence-grounded entities were found. Refine the Research Profile or use a text-based PDF.");
   } catch (error) { job.errors.push(error instanceof Error ? error.message : "Processing failed"); await update("failed", 100, "Processing failed safely; review the error log and retry"); }
 }

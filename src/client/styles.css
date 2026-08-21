@@ -151,7 +151,7 @@ select:focus-visible {
 .overview-grid { display: grid; grid-template-columns: minmax(520px, 1.55fr) minmax(320px, 0.8fr); gap: 14px; }
 .right-stack { display: grid; align-content: start; gap: 14px; }
 .panel { padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025); }
-.panel-heading { display: flex; justify-content: space-between; gap: 14px; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .help, .job-panel p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .field { display: block; margin-top: 16px; }
 .field > span { display: block; margin-bottom: 7px; color: #424245; font-size: 11px; font-weight: 650; }

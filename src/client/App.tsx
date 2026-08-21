@@ -35,11 +35,14 @@ import type {
 } from "../shared/contracts";
 import { getSavedPresetProfile } from "../shared/preset-profiles";
 import { api } from "./api";
+import { toWikiLatex } from "./math-rendering";
 
 type Language = "en" | "zh";
+type ProfileListDraft = { entityTypes: string; preferredRelations: string; exclude: string };
+type ProfileListInputs = ProfileListDraft;
 const overviewDrafts = new Map<
   string,
-  { selectedTemplate: string; profile: WikiProfile }
+  { selectedTemplate: string; profile: WikiProfile; listInputs?: ProfileListInputs; profileDirty?: boolean }
 >();
 const copy = {
   en: {
@@ -101,7 +104,7 @@ const copy = {
     ignoreHint: "generic background, unrelated methods",
     customRequirements: "Custom generation requirements",
     customRequirementsHint: "Describe any custom ontology, fields, relation logic, priorities, or output constraints.",
-    classificationDecision: "Classification decision",
+    profileUpdatedElsewhere: "This blueprint changed in another page. Save your edits or refresh to discard them and use the latest version.",
     save: "Save blueprint",
     confirm: "Confirm and build Wiki",
     rerun: "Rebuild from current sources",
@@ -179,6 +182,7 @@ const copy = {
     jobPlanGeneration: "Wiki structure generation",
     jobRelevance: "Relevance filtering batches",
     jobExtraction: "Knowledge extraction batches",
+    jobSemanticInterpretation: "Node understanding batches",
     jobClassification: "Entity classification batches",
     jobElapsed: "elapsed",
     documentUploaded: "Awaiting processing",
@@ -242,7 +246,7 @@ const copy = {
     ignoreHint: "通用背景、无关方法、重复描述",
     customRequirements: "自定义生成要求",
     customRequirementsHint: "描述自定义分类、字段、关系逻辑、优先级或输出约束。",
-    classificationDecision: "分类决策",
+    profileUpdatedElsewhere: "另一个页面修改了这份研究蓝图。请先保存本地修改，或刷新页面放弃本地修改，再同步最新版本。",
     save: "保存研究蓝图",
     confirm: "确认并构建 Wiki",
     rerun: "按当前材料重新构建",
@@ -319,6 +323,7 @@ const copy = {
     jobPlanGeneration: "Wiki 结构设计",
     jobRelevance: "相关性筛选批次",
     jobExtraction: "知识抽取批次",
+    jobSemanticInterpretation: "节点理解批次",
     jobClassification: "实体分类批次",
     jobElapsed: "已用时",
     documentUploaded: "等待处理",
@@ -533,6 +538,38 @@ const split = (input: string) =>
     .map((value) => value.trim())
     .filter(Boolean);
 const join = (input: string[]) => input.join(", ");
+const listInputsFromProfile = (profile: WikiProfile): ProfileListInputs => ({
+  entityTypes: join(profile.entityTypes),
+  preferredRelations: join(profile.preferredRelations),
+  exclude: join(profile.exclude),
+});
+const PROFILE_SYNC_CHANNEL = "llm-wiki-profile-sync";
+const PROFILE_SYNC_STORAGE_KEY = "llm-wiki-profile-sync-message";
+type ProfileSyncMessage = { id: string; projectId: string; profile: WikiProfile };
+const isProfileSyncMessage = (value: unknown): value is ProfileSyncMessage => {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Partial<ProfileSyncMessage>;
+  return typeof message.id === "string" && typeof message.projectId === "string" && Boolean(message.profile);
+};
+const profileSyncPublisher = typeof BroadcastChannel !== "undefined"
+  ? new BroadcastChannel(PROFILE_SYNC_CHANNEL)
+  : undefined;
+const publishProfileSync = (projectId: string, profile: WikiProfile) => {
+  const message: ProfileSyncMessage = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    projectId,
+    profile,
+  };
+  if (profileSyncPublisher) {
+    profileSyncPublisher.postMessage(message);
+    return;
+  }
+  try {
+    localStorage.setItem(PROFILE_SYNC_STORAGE_KEY, JSON.stringify(message));
+  } catch {
+    // Server persistence remains the source of truth if browser storage is unavailable.
+  }
+};
 
 export function App() {
   const [lang, setLang] = useState<Language>(() =>
@@ -783,9 +820,23 @@ function Overview({
   const { project } = snapshot;
   const projectId = project.id;
   const buildRunning = Boolean(snapshot.job && !["completed", "failed"].includes(snapshot.job.status));
+  const initialProfile = overviewDrafts.get(projectId)?.profile ?? project.profile ?? emptyProfile;
   const [profile, setProfile] = useState<WikiProfile>(
-    () => overviewDrafts.get(projectId)?.profile ?? project.profile ?? emptyProfile,
+    () => initialProfile,
   );
+  const [profileDirty, setProfileDirtyState] = useState(() => Boolean(overviewDrafts.get(projectId)?.profileDirty));
+  const profileDirtyRef = useRef(profileDirty);
+  const profileSyncSeenRef = useRef("");
+  const markProfileDirty = (dirty: boolean) => {
+    profileDirtyRef.current = dirty;
+    setProfileDirtyState(dirty);
+  };
+  // Keep the raw comma-separated strings while editing. Parsing on every keystroke
+  // removes empty trailing items (especially after a comma) and causes cursor jumps.
+  const [listInputs, setListInputs] = useState<ProfileListInputs>(() => {
+    const draft = overviewDrafts.get(projectId);
+    return draft?.listInputs ?? listInputsFromProfile(initialProfile);
+  });
   const [saving, setSaving] = useState(false),
     [error, setError] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
@@ -793,26 +844,57 @@ function Overview({
       () => overviewDrafts.get(projectId)?.selectedTemplate ?? templateForProfile(project.profile),
     ),
     [templateHint, setTemplateHint] = useState("");
-  useEffect(() => {
-    overviewDrafts.set(projectId, { selectedTemplate, profile });
-  }, [projectId, selectedTemplate, profile]);
   // 项目切换（snapshot 更新为新项目）时，重置为该项目的草稿或服务端 profile，避免串项目
   useEffect(() => {
     const draft = overviewDrafts.get(projectId);
-    setProfile(draft?.profile ?? project.profile ?? emptyProfile);
+    const nextProfile = draft?.profile ?? project.profile ?? emptyProfile;
+    setProfile(nextProfile);
+    setListInputs(draft?.listInputs ?? listInputsFromProfile(nextProfile));
     setSelectedTemplate(draft?.selectedTemplate ?? templateForProfile(project.profile));
+    markProfileDirty(Boolean(draft?.profileDirty));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+  useEffect(() => {
+    overviewDrafts.set(projectId, { selectedTemplate, profile, listInputs, profileDirty });
+  }, [projectId, selectedTemplate, profile, listInputs, profileDirty]);
   useEffect(() => {
     setSelected((previous) =>
       previous.filter((id) => snapshot.documents.some((d) => d.id === id)),
     );
   }, [snapshot.documents]);
+  useEffect(() => {
+    const applyRemoteProfile = (value: unknown) => {
+      if (!isProfileSyncMessage(value) || value.projectId !== projectId || profileSyncSeenRef.current === value.id) return;
+      profileSyncSeenRef.current = value.id;
+      if (profileDirtyRef.current) {
+        setTemplateHint(t.profileUpdatedElsewhere);
+        return;
+      }
+      markProfileDirty(false);
+      setProfile(value.profile);
+      setListInputs(listInputsFromProfile(value.profile));
+      setSelectedTemplate(templateForProfile(value.profile));
+      setTemplateHint("");
+      void reload();
+    };
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(PROFILE_SYNC_CHANNEL);
+      channel.onmessage = (event) => applyRemoteProfile(event.data);
+      return () => channel.close();
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== PROFILE_SYNC_STORAGE_KEY || !event.newValue) return;
+      try { applyRemoteProfile(JSON.parse(event.newValue)); } catch { /* Ignore malformed browser events. */ }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [projectId, reload, t]);
   const prevLang = useRef(lang);
   useEffect(() => {
     if (prevLang.current === lang) return;
     prevLang.current = lang;
     if (selectedTemplate === "custom") {
+      markProfileDirty(true);
       setProfile((current) => ({ ...current, outputLanguage: lang }));
       return;
     }
@@ -820,17 +902,26 @@ function Overview({
     if (!template) return;
     const preset = TEMPLATE_PRESETS[selectedTemplate as PresetTemplateId];
     const saved = getSavedPresetProfile(project, preset, lang);
-    setProfile({ ...(saved ?? template[lang]), preset, outputLanguage: lang });
+    const nextProfile = { ...(saved ?? template[lang]), preset, outputLanguage: lang };
+    markProfileDirty(true);
+    setProfile(nextProfile);
+    setListInputs(listInputsFromProfile(nextProfile));
   }, [lang, selectedTemplate]);
   const update = (
     key: keyof WikiProfile,
     value: WikiProfile[keyof WikiProfile],
-  ) => setProfile((previous) => ({ ...previous, [key]: value }));
+  ) => {
+    markProfileDirty(true);
+    setProfile((previous) => ({ ...previous, [key]: value }));
+  };
   const applyTemplate = async (templateId: PresetTemplateId) => {
     const preset = TEMPLATE_PRESETS[templateId];
     const template = getSavedPresetProfile(project, preset, lang) ?? PRESET_TEMPLATES[templateId][lang];
+    markProfileDirty(true);
     setSelectedTemplate(templateId);
-    setProfile({ ...template, preset, outputLanguage: lang });
+    const nextProfile = { ...template, preset, outputLanguage: lang };
+    setProfile(nextProfile);
+    setListInputs(listInputsFromProfile(nextProfile));
     setTemplateHint(
       snapshot.documents.some((document) => document.role === "source")
         ? t.templateApplied
@@ -838,9 +929,12 @@ function Overview({
     );
   };
   const selectCustom = () => {
+    markProfileDirty(true);
     setSelectedTemplate("custom");
     setTemplateHint(t.templateHint);
-    setProfile({ ...emptyProfile, preset: "custom", outputLanguage: lang });
+    const nextProfile: WikiProfile = { ...emptyProfile, preset: "custom", outputLanguage: lang };
+    setProfile(nextProfile);
+    setListInputs(listInputsFromProfile(nextProfile));
   };
   const upload = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -853,8 +947,11 @@ function Overview({
         await api.upload(project.id, file, role);
       if (role === "profile") {
         const understood = await api.understandProfile(project.id);
+        markProfileDirty(false);
         setProfile(understood.profile);
+        setListInputs(listInputsFromProfile(understood.profile));
         setSelectedTemplate(templateForProfile(understood.profile));
+        publishProfileSync(project.id, understood.profile);
       }
       await reload();
     } catch (e) {
@@ -868,7 +965,9 @@ function Overview({
     try {
       const savedProfile = { ...profile, outputLanguage: lang };
       setProfile(savedProfile);
-      await api.updateProfile(project.id, savedProfile);
+      const savedProject = await api.updateProfile(project.id, savedProfile);
+      markProfileDirty(false);
+      if (savedProject.profile) publishProfileSync(project.id, savedProject.profile);
       await reload();
     } catch (e) {
       setError((e as Error).message);
@@ -882,7 +981,9 @@ function Overview({
     try {
       const savedProfile = { ...profile, outputLanguage: lang };
       setProfile(savedProfile);
-      await api.updateProfile(project.id, savedProfile);
+      const savedProject = await api.updateProfile(project.id, savedProfile);
+      markProfileDirty(false);
+      if (savedProject.profile) publishProfileSync(project.id, savedProject.profile);
       await api.confirm(project.id);
       await reload();
     } catch (e) {
@@ -984,8 +1085,12 @@ function Overview({
             </Field>
             <Field label={t.entityTypes}>
               <input
-                value={join(profile.entityTypes)}
-                onChange={(e) => update("entityTypes", split(e.target.value))}
+                value={listInputs.entityTypes}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setListInputs((current) => ({ ...current, entityTypes: value }));
+                  update("entityTypes", split(value));
+                }}
                 placeholder={t.entitiesHint}
               />
             </Field>
@@ -993,17 +1098,23 @@ function Overview({
           <div className="field-row">
             <Field label={t.relations}>
               <input
-                value={join(profile.preferredRelations)}
-                onChange={(e) =>
-                  update("preferredRelations", split(e.target.value))
-                }
+                value={listInputs.preferredRelations}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setListInputs((current) => ({ ...current, preferredRelations: value }));
+                  update("preferredRelations", split(value));
+                }}
                 placeholder={t.relationsHint}
               />
             </Field>
             <Field label={t.ignore}>
               <input
-                value={join(profile.exclude)}
-                onChange={(e) => update("exclude", split(e.target.value))}
+                value={listInputs.exclude}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setListInputs((current) => ({ ...current, exclude: value }));
+                  update("exclude", split(value));
+                }}
                 placeholder={t.ignoreHint}
               />
             </Field>
@@ -1342,23 +1453,6 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                   label={t.importance}
                   value={`${Math.round(selected.importance * 100)}%`}
                 />
-                {selected.classification ? (
-                  <>
-                    <h3>{t.classificationDecision}</h3>
-                    <p className="muted">
-                      {selected.classification.status === "accepted"
-                        ? (lang === "zh" ? "已验证" : "Validated")
-                        : selected.classification.status === "corrected"
-                          ? (lang === "zh" ? "已自动纠正" : "Auto-corrected")
-                          : (lang === "zh" ? "需要复核" : "Needs review")}
-                      {` · ${Math.round(selected.classification.confidence * 100)}%`}
-                    </p>
-                    {selected.classification.semanticExplanation ? (
-                      <p>{selected.classification.semanticExplanation}</p>
-                    ) : null}
-                    <p className="muted">{selected.classification.reason}</p>
-                  </>
-                ) : null}
                 <h3>{t.properties}</h3>
                 {Object.keys(selected.properties).length ? (
                   <dl>
@@ -1646,23 +1740,6 @@ function readableChatContent(content: string) {
     .trim();
 }
 
-function toWikiLatex(formula: string) {
-  const greek: Record<string, string> = {
-    α: "\\alpha", β: "\\beta", γ: "\\gamma", Δ: "\\Delta", θ: "\\theta",
-    λ: "\\lambda", μ: "\\mu", π: "\\pi", ρ: "\\rho", τ: "\\tau", φ: "\\phi", ω: "\\omega",
-  };
-  return formula
-    .replace(/[αβγΔθλμπρτφω]/gu, (symbol) => greek[symbol])
-    .replace(/_([A-Za-z0-9]+(?:,[A-Za-z0-9]+)?)/g, "_{$1}")
-    .replace(/\*/g, "\\cdot ")
-    .replace(/≈/g, "\\approx ")
-    .replace(/≤/g, "\\le ")
-    .replace(/≥/g, "\\ge ")
-    .replace(/≠/g, "\\ne ")
-    .replace(/∝/g, "\\propto ")
-    .replace(/√/g, "\\sqrt ");
-}
-
 function renderStructuredValue(content: string) {
   const mathSignal = content.search(/[=<>≈≤≥≠∝∑∫√αβγΔθλμπρτφω]/u);
   if (mathSignal < 0) return content;
@@ -1896,9 +1973,14 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
     plan_generation: t.jobPlanGeneration,
     relevance: t.jobRelevance,
     extraction: t.jobExtraction,
+    semantic_interpretation: t.jobSemanticInterpretation,
     classification: t.jobClassification,
-    classification_review: t.jobClassification,
   }[batch.phase] : undefined;
+  // Older persisted jobs may still contain the removed post-classification review diagnostics.
+  // They are historical data, not actionable classification messages, so keep them out of the UI.
+  const visibleErrors = (job?.errors ?? []).filter(error =>
+    !/语义理解|类别仍为待复核|semantic interpretation|classification.*(?:review|pending)/iu.test(error),
+  );
   const elapsed = batch
     ? batch.elapsedSeconds >= 60
       ? `${Math.floor(batch.elapsedSeconds / 60)}m ${batch.elapsedSeconds % 60}s`
@@ -1924,7 +2006,7 @@ function JobPanel({ snapshot }: { snapshot: ProjectSnapshot }) {
           {batch && batchLabel && (
             <p className="muted">{batchLabel}：{batch.completed}/{batch.total} · {t.jobElapsed} {elapsed}</p>
           )}
-          {job.errors.map((error) => (
+          {visibleErrors.map((error) => (
             <Alert key={error} message={error} />
           ))}
         </>

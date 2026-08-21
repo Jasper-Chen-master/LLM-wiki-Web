@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   WikiCategorySchema,
-  WikiCategoryRoleSchema,
   WikiFieldRuleSchema,
   WikiGenerationPlanSchema,
   WikiQualityPolicySchema,
@@ -9,14 +8,13 @@ import {
   WikiPresetSchema,
   type DocumentBlock,
   type JobBatchPhase,
+  type WikiClassificationDecision,
   type WikiGenerationPlan,
   type WikiProfile,
 } from "../../shared/contracts.js";
 import { createLLMProvider, DemoLLMProvider, generateStructured, type LLMProvider } from "../llm-provider.js";
 import {
   classificationPrompt,
-  classificationReviewPrompt,
-  classificationReviewSystemPrompt,
   classificationSystemPrompt,
   corpusAnalysisPrompt,
   corpusAnalysisSystemPrompt,
@@ -26,15 +24,14 @@ import {
   generationPlanSystemPrompt,
   relevancePrompt,
   relevanceSystemPrompt,
+  semanticInterpretationPrompt,
+  semanticInterpretationSystemPrompt,
 } from "../prompts/wiki-generation.js";
 import {
-  applyPlannedEntityTypes,
-  ensurePlanCategoriesForEntities,
+  categoryForIdentifier,
   fallbackGenerationPlan,
   normalizeGenerationPlan,
   representativeCorpusSample,
-  resolveEntityClassification,
-  type ClassificationCandidate,
 } from "../services/wiki-planning-service.js";
 
 const extractionSchema = z.object({
@@ -87,19 +84,35 @@ const relevanceSchema = z.object({
   })).default([]),
 });
 
-const classificationSchema = z.object({
-  classifications: z.array(z.object({
-    entityName: z.string().min(1), categoryId: z.string().min(1), semanticRole: WikiCategoryRoleSchema,
-    confidence: z.number().min(0).max(1), explicitIdentity: z.boolean(),
-    identityEvidence: z.string().max(500).default(""), alternatives: z.array(z.string().min(1)).max(3).default([]),
-    semanticExplanation: z.string().min(1).max(700),
-    decisionFactors: z.array(z.string().min(1).max(240)).min(1).max(6),
-    counterEvidence: z.string().max(500).default(""),
-    needsReview: z.boolean().default(false), reason: z.string().min(1).max(320),
-  })).default([]),
+// Keep the envelopes permissive, then validate every item independently. A malformed semantic
+// item is ignored for classification context; a malformed classification item falls back to its
+// already-extracted controlled label. Neither case starts a second classification/review pass.
+const semanticInterpretationItemSchema = z.object({
+  entityName: z.string().min(1),
+  semanticIdentity: z.string().min(1).max(360),
+  semanticExplanation: z.string().min(1).max(700),
+  decisionFactors: z.array(z.string().min(1).max(240)).min(1).max(6),
+  identityEvidence: z.string().min(1).max(500),
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1).max(320),
 });
+const semanticInterpretationEnvelopeSchema = z.object({ interpretations: z.array(z.unknown()).default([]) });
+const classificationItemSchema = z.object({
+  entityName: z.string().min(1),
+  categoryId: z.string().min(1),
+  confidence: z.number().min(0).max(1).default(1),
+  reason: z.string().max(320).default("Selected from the complete source-grounded context."),
+});
+const classificationEnvelopeSchema = z.object({ classifications: z.array(z.unknown()).default([]) });
+type SemanticInterpretation = z.infer<typeof semanticInterpretationItemSchema>;
+type DirectClassification = z.infer<typeof classificationItemSchema>;
 
-export type KnowledgeExtraction = z.infer<typeof extractionSchema>;
+type ExtractedKnowledgeEntity = z.infer<typeof extractionSchema>["entities"][number] & {
+  classification?: WikiClassificationDecision;
+};
+export type KnowledgeExtraction = Omit<z.infer<typeof extractionSchema>, "entities"> & {
+  entities: ExtractedKnowledgeEntity[];
+};
 
 export interface PipelineProgressUpdate {
   phase: JobBatchPhase;
@@ -191,14 +204,15 @@ const configuredConcurrency = (name: string, fallback: number) => {
 const PLANNING_CONCURRENCY = configuredConcurrency("WIKI_PLANNING_CONCURRENCY", 2);
 const PIPELINE_CONCURRENCY = configuredConcurrency("WIKI_PIPELINE_CONCURRENCY", 3);
 const pipelineConcurrency = (profile: WikiProfile) => profile.costPreference === "quality" ? Math.min(2, PIPELINE_CONCURRENCY) : PIPELINE_CONCURRENCY;
-const stageBudget = (profile: WikiProfile, stage: "relevance" | "extraction" | "classification") => {
+const stageBudget = (profile: WikiProfile, stage: "relevance" | "extraction" | "semantic_interpretation" | "classification") => {
   const mode = profile.costPreference ?? "balanced";
   if (stage === "relevance") return mode === "economy" ? { maxChars: 28_000, maxItems: 64, itemChars: 1_400 } : mode === "quality" ? { maxChars: 14_000, maxItems: 28, itemChars: 2_200 } : { maxChars: 20_000, maxItems: 48, itemChars: 1_600 };
   if (stage === "extraction") return mode === "economy" ? { maxChars: 24_000, maxItems: 40, itemChars: 1_400 } : mode === "quality" ? { maxChars: 12_000, maxItems: 18, itemChars: 2_400 } : { maxChars: 18_000, maxItems: 28, itemChars: 1_600 };
+  if (stage === "semantic_interpretation") return mode === "economy" ? { maxChars: 24_000, maxItems: 32, itemChars: 0 } : mode === "quality" ? { maxChars: 12_000, maxItems: 14, itemChars: 0 } : { maxChars: 16_000, maxItems: 22, itemChars: 0 };
   return mode === "economy" ? { maxChars: 28_000, maxItems: 96, itemChars: 0 } : mode === "quality" ? { maxChars: 14_000, maxItems: 40, itemChars: 0 } : { maxChars: 20_000, maxItems: 64, itemChars: 0 };
 };
 
-class SafePipelineProvider implements PipelineProvider {
+export class SafePipelineProvider implements PipelineProvider {
   constructor(private readonly provider: LLMProvider) {}
 
   async buildGenerationPlan(
@@ -268,8 +282,8 @@ class SafePipelineProvider implements PipelineProvider {
         categories: categories.slice(0, 16),
         classificationRules: [
           profile.outputLanguage === "zh"
-            ? "名称明确表示定律、定理、理论、模型、方法、公式、实验或现象时，必须归入对应语义类别。"
-            : "Names that explicitly identify a law, theorem, theory, model, method, formula, experiment, or phenomenon must use the corresponding semantic category.",
+            ? "先依据原文证据重建节点的语义身份与边界，再将其映射到受控类别；名称、公式形式和章节标题不能单独决定分类。"
+            : "Reconstruct each node's evidence-grounded semantic identity and boundary before mapping it to a controlled category; names, equation-like form, and headings cannot decide classification by themselves.",
         ],
       }), profile);
     }
@@ -341,7 +355,7 @@ class SafePipelineProvider implements PipelineProvider {
           try {
             output = await generateStructured(this.provider, {
               system: extractionSystemPrompt(profile),
-              prompt: `${extractionPrompt(profile, plan, evidenceMap)}\nThe prior extraction was empty. Re-run the knowledge inventory and coverage audit over every supplied block. Recover any definition, method, mechanism, material, quantity, formula, experiment, phenomenon, condition, limitation, result, or relation that is both goal-relevant and evidence-backed; do not invent facts.`,
+              prompt: `${extractionPrompt(profile, plan, evidenceMap)}\n上一次提取为空。请重新检查本批全部文档块，完成知识盘点与覆盖检查；补回与研究目标相关且有证据支持的定义、方法、机制、材料、数量、公式、实验、现象、条件、限制、结果和关系，不得编造事实。`,
               temperature: 0,
               maxTokens: 8_000,
             }, extractionSchema, 1);
@@ -355,8 +369,6 @@ class SafePipelineProvider implements PipelineProvider {
         aggregate.entities.push(...output.entities);
         aggregate.relations.push(...output.relations);
       }
-      ensurePlanCategoriesForEntities(plan, aggregate.entities);
-      const categoryById = new Map(plan.categories.map(category => [category.id.normalize("NFKC").trim().toLocaleLowerCase(), category]));
       const normalizedEntityKey = (entity: { name: string; canonicalName?: string }) =>
         (entity.canonicalName ?? entity.name).normalize("NFKC").trim().toLocaleLowerCase();
       const normalizedText = (value: string) => value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -374,10 +386,9 @@ class SafePipelineProvider implements PipelineProvider {
       const candidates = [...classificationCandidates.values()];
       const evidenceBlocksFor = (entity: KnowledgeExtraction["entities"][number]) =>
         (entity.evidenceIds ?? []).map(id => blockById.get(id)).filter((block): block is DocumentBlock => Boolean(block)).slice(0, 6);
-      const evidenceTextFor = (entity: KnowledgeExtraction["entities"][number]) =>
-        evidenceBlocksFor(entity).map(block => block.text).join("\n").slice(0, 3_600);
       const relationContextFor = (entity: KnowledgeExtraction["entities"][number]) => {
-        const names = new Set([entity.name, entity.canonicalName, ...(entity.aliases ?? [])].filter((name): name is string => Boolean(name)).map(normalizedText));
+        const names = new Set([entity.name, entity.canonicalName, ...(entity.aliases ?? [])]
+          .filter((name): name is string => Boolean(name)).map(normalizedText));
         return aggregate.relations.filter(relation => names.has(normalizedText(relation.source)) || names.has(normalizedText(relation.target)))
           .slice(0, 12)
           .map(relation => ({
@@ -385,119 +396,136 @@ class SafePipelineProvider implements PipelineProvider {
             status: relation.relationStatus, conditions: relation.conditions, scope: relation.scope,
           }));
       };
-      const candidatePayload = (entity: KnowledgeExtraction["entities"][number]) => ({
-        name: entity.name, canonicalName: entity.canonicalName, summary: entity.summary,
-        properties: entity.properties, proposedType: entity.type,
+      const semanticPayload = (entity: KnowledgeExtraction["entities"][number]) => ({
+        name: entity.name,
+        canonicalName: entity.canonicalName,
+        summary: entity.summary,
+        properties: entity.properties,
         evidenceContext: evidenceBlocksFor(entity).map(block => ({
           blockId: block.id, page: block.page, section: block.section,
-          blockType: block.blockType, text: block.text.slice(0, 700),
+          blockType: block.blockType, text: block.text.slice(0, 900),
         })),
         relationContext: relationContextFor(entity),
       });
+      const classificationKeysByName = new Map(candidates.flatMap(entity => {
+        const key = normalizedEntityKey(entity);
+        return [entity.name, entity.canonicalName, ...(entity.aliases ?? [])]
+          .filter((name): name is string => Boolean(name))
+          .map(name => [normalizedText(name), key] as const);
+      }));
+
+      // Preserve the complete understanding step: reconstruct each node from its evidence
+      // before exposing the controlled category list. This is not a review queue; its output is
+      // simply the semantic context passed to the one classification pass below.
+      const semanticBudget = stageBudget(profile, "semantic_interpretation");
+      const semanticBatches = chunksByTextBudget(
+        candidates,
+        entity => JSON.stringify(semanticPayload(entity)).length,
+        semanticBudget,
+      );
+      const semanticInterpretations = new Map<string, SemanticInterpretation & { identityEvidenceVerified: boolean }>();
+      await report({ phase: "semantic_interpretation", completed: 0, total: semanticBatches.length });
+      const semanticResults = await mapWithConcurrency(semanticBatches, pipelineConcurrency(profile), async entityBatch => {
+        try {
+          return await generateStructured(this.provider, {
+            system: semanticInterpretationSystemPrompt(profile),
+            prompt: semanticInterpretationPrompt(profile, plan, entityBatch.map(semanticPayload)),
+            temperature: 0,
+            maxTokens: 6_500,
+          }, semanticInterpretationEnvelopeSchema, 1);
+        } catch {
+          // Classification still runs for every node when an interpretation batch is unavailable.
+          return undefined;
+        }
+      }, (completed, total) => report({ phase: "semantic_interpretation", completed, total }));
+      for (const result of semanticResults) if (result) {
+        for (const rawInterpretation of result.interpretations) {
+          const parsed = semanticInterpretationItemSchema.safeParse(rawInterpretation);
+          if (!parsed.success) continue;
+          const interpretation = parsed.data;
+          const entityKey = classificationKeysByName.get(normalizedText(interpretation.entityName));
+          const entity = entityKey ? classificationCandidates.get(entityKey) : undefined;
+          if (!entityKey || !entity) continue;
+          const evidenceText = normalizedText(evidenceBlocksFor(entity).map(block => block.text).join("\n"));
+          const excerpt = normalizedText(interpretation.identityEvidence);
+          semanticInterpretations.set(entityKey, {
+            ...interpretation,
+            identityEvidenceVerified: Boolean(excerpt.length >= 6 && evidenceText.includes(excerpt)),
+          });
+        }
+      }
+
+      // The classifier receives both the semantic understanding and the original context. The
+      // extractor's type is retained only as a server-side fallback and is never sent as a hint.
+      const classificationPayload = (entity: KnowledgeExtraction["entities"][number]) => {
+        const interpretation = semanticInterpretations.get(normalizedEntityKey(entity));
+        const verifiedInterpretation = interpretation?.identityEvidenceVerified ? interpretation : undefined;
+        return {
+          ...semanticPayload(entity),
+          semanticInterpretation: verifiedInterpretation ? {
+            semanticIdentity: verifiedInterpretation.semanticIdentity,
+            semanticExplanation: verifiedInterpretation.semanticExplanation,
+            decisionFactors: verifiedInterpretation.decisionFactors,
+            identityEvidence: verifiedInterpretation.identityEvidence,
+            confidence: verifiedInterpretation.confidence,
+          } : undefined,
+        };
+      };
       const classificationBudget = stageBudget(profile, "classification");
       const classificationBatches = chunksByTextBudget(
         candidates,
-        entity => JSON.stringify(candidatePayload(entity)).length,
+        entity => JSON.stringify(classificationPayload(entity)).length,
         classificationBudget,
       );
-      const classifiedCandidates = new Map<string, ClassificationCandidate>();
-      const classificationKeysByName = new Map(candidates.flatMap(entity => {
-        const key = normalizedEntityKey(entity);
-        return [entity.name, entity.canonicalName].filter((name): name is string => Boolean(name))
-          .map(name => [name.normalize("NFKC").trim().toLocaleLowerCase(), key] as const);
-      }));
+      const classifiedCandidates = new Map<string, { categoryId: string; result: DirectClassification }>();
       await report({ phase: "classification", completed: 0, total: classificationBatches.length });
       const classificationResults = await mapWithConcurrency(classificationBatches, pipelineConcurrency(profile), async entityBatch => {
         try {
           return await generateStructured(this.provider, {
             system: classificationSystemPrompt(profile),
-            prompt: classificationPrompt(profile, plan, entityBatch.map(candidatePayload)),
+            prompt: classificationPrompt(profile, plan, entityBatch.map(classificationPayload)),
             temperature: 0,
             maxTokens: 6_500,
-          }, classificationSchema, 1);
+          }, classificationEnvelopeSchema, 1);
         } catch {
-          // Extraction types remain available for deterministic plan mapping below.
+          // The entity still receives its controlled extraction label below. No review pass is run.
           return undefined;
         }
       }, (completed, total) => report({ phase: "classification", completed, total }));
       for (const result of classificationResults) if (result) {
-        for (const classification of result.classifications) {
-          const category = categoryById.get(classification.categoryId.normalize("NFKC").trim().toLocaleLowerCase());
-          const entityKey = classificationKeysByName.get(classification.entityName.normalize("NFKC").trim().toLocaleLowerCase());
-          const entity = entityKey ? classificationCandidates.get(entityKey) : undefined;
-          if (!category || !entityKey || !entity) continue;
-          const evidenceText = normalizedText(evidenceTextFor(entity));
-          const excerpt = normalizedText(classification.identityEvidence);
-          classifiedCandidates.set(entityKey, {
-            categoryId: category.id, semanticRole: classification.semanticRole,
-            confidence: classification.confidence, explicitIdentity: classification.explicitIdentity,
-            identityEvidence: classification.identityEvidence || undefined,
-            identityEvidenceVerified: Boolean(excerpt.length >= 6 && evidenceText.includes(excerpt)),
-            alternatives: classification.alternatives, semanticExplanation: classification.semanticExplanation,
-            decisionFactors: classification.decisionFactors, counterEvidence: classification.counterEvidence || undefined,
-            reason: classification.reason,
-            needsReview: classification.needsReview || classification.semanticRole !== category.role,
-            source: "llm",
-          });
+        for (const rawClassification of result.classifications) {
+          const parsed = classificationItemSchema.safeParse(rawClassification);
+          if (!parsed.success) continue;
+          const classification = parsed.data;
+          const entityKey = classificationKeysByName.get(normalizedText(classification.entityName));
+          const category = categoryForIdentifier(plan, classification.categoryId);
+          if (!entityKey || !category) continue;
+          classifiedCandidates.set(entityKey, { categoryId: category.id, result: classification });
         }
       }
 
-      // llm_wiki's analysis/generation split is extended here with a selective audit pass:
-      // only contradictory, low-confidence, or explicitly ambiguous proposals spend another call.
-      const reviewEntities = candidates.filter(entity => {
-        const candidate = classifiedCandidates.get(normalizedEntityKey(entity));
-        if (!candidate) return false;
-        const resolved = resolveEntityClassification(plan, entity, candidate);
-        const reviewThreshold = Math.max(plan.qualityPolicy?.entityThreshold ?? .6, profile.qualityPreference === "precision_first" ? .82 : .72);
-        return resolved.decision.status !== "accepted" || candidate.needsReview || candidate.confidence < reviewThreshold;
+      aggregate.entities = aggregate.entities.map(entity => {
+        const key = normalizedEntityKey(entity);
+        const classified = classifiedCandidates.get(key);
+        const fallback = categoryForIdentifier(plan, entity.type) ?? plan.categories[0];
+        const category = classified ? categoryForIdentifier(plan, classified.categoryId) ?? fallback : fallback;
+        if (!category) return entity;
+        const interpretation = semanticInterpretations.get(key);
+        const verifiedInterpretation = interpretation?.identityEvidenceVerified ? interpretation : undefined;
+        const classification: WikiClassificationDecision | undefined = classified ? {
+          semanticRole: category.role,
+          categoryId: category.id,
+          confidence: classified.result.confidence,
+          status: "accepted",
+          source: "llm",
+          reason: classified.result.reason,
+          semanticIdentity: verifiedInterpretation?.semanticIdentity,
+          semanticExplanation: verifiedInterpretation?.semanticExplanation,
+          decisionFactors: verifiedInterpretation?.decisionFactors,
+          identityEvidence: verifiedInterpretation?.identityEvidence,
+        } : undefined;
+        return { ...entity, type: category.label, ...(classification ? { classification } : {}) };
       });
-      if (reviewEntities.length) {
-        const reviewBatches = chunksByTextBudget(
-          reviewEntities,
-          entity => JSON.stringify({ ...candidatePayload(entity), proposal: classifiedCandidates.get(normalizedEntityKey(entity)) }).length,
-          classificationBudget,
-        );
-        await report({ phase: "classification_review", completed: 0, total: reviewBatches.length });
-        const reviewResults = await mapWithConcurrency(reviewBatches, Math.min(2, pipelineConcurrency(profile)), async entityBatch => {
-          try {
-            return await generateStructured(this.provider, {
-              system: classificationReviewSystemPrompt(profile),
-              prompt: classificationReviewPrompt(profile, plan, entityBatch.map(entity => ({
-                ...candidatePayload(entity), proposal: classifiedCandidates.get(normalizedEntityKey(entity)),
-              }))),
-              temperature: 0,
-              maxTokens: 6_500,
-            }, classificationSchema, 1);
-          } catch {
-            return undefined;
-          }
-        }, (completed, total) => report({ phase: "classification_review", completed, total }));
-        for (const result of reviewResults) if (result) {
-          for (const review of result.classifications) {
-            const category = categoryById.get(normalizedText(review.categoryId));
-            const entityKey = classificationKeysByName.get(normalizedText(review.entityName));
-            const entity = entityKey ? classificationCandidates.get(entityKey) : undefined;
-            if (!category || !entityKey || !entity) continue;
-            const evidenceText = normalizedText(evidenceTextFor(entity));
-            const excerpt = normalizedText(review.identityEvidence);
-            classifiedCandidates.set(entityKey, {
-              categoryId: category.id, semanticRole: review.semanticRole,
-              confidence: review.confidence, explicitIdentity: review.explicitIdentity,
-              identityEvidence: review.identityEvidence || undefined,
-              identityEvidenceVerified: Boolean(excerpt.length >= 6 && evidenceText.includes(excerpt)),
-              alternatives: review.alternatives, semanticExplanation: review.semanticExplanation,
-              decisionFactors: review.decisionFactors, counterEvidence: review.counterEvidence || undefined,
-              reason: review.reason,
-              needsReview: review.needsReview || review.semanticRole !== category.role,
-              source: "review",
-            });
-          }
-        }
-      }
-      aggregate.entities = applyPlannedEntityTypes(plan, aggregate.entities.map(entity => ({
-        ...entity,
-        classificationCandidate: classifiedCandidates.get(normalizedEntityKey(entity)),
-      })));
       return aggregate;
     }, onWaiting);
   }

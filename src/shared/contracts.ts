@@ -4,7 +4,7 @@ export const DocumentKindSchema = z.enum(["pdf", "docx"]);
 export type DocumentKind = z.infer<typeof DocumentKindSchema>;
 export const JobStatusSchema = z.enum(["queued", "parsing", "analyzing", "planning", "filtering", "extracting", "resolving", "building_graph", "completed", "failed"]);
 export type JobStatus = z.infer<typeof JobStatusSchema>;
-export type JobBatchPhase = "corpus_analysis" | "plan_generation" | "relevance" | "extraction" | "classification" | "classification_review";
+export type JobBatchPhase = "corpus_analysis" | "plan_generation" | "relevance" | "extraction" | "semantic_interpretation" | "classification";
 export interface JobBatchProgress { phase: JobBatchPhase; completed: number; total: number; elapsedSeconds: number; }
 
 export const WikiPresetSchema = z.enum([
@@ -110,8 +110,11 @@ export interface WikiClassificationDecision {
   categoryId: string;
   confidence: number;
   status: "accepted" | "corrected" | "needs_review";
-  source: "lexical" | "llm" | "review" | "fallback";
+  /** `extraction` is an explicitly provisional source, never a validated semantic conclusion. */
+  source: "lexical" | "extraction" | "llm" | "review" | "fallback";
   reason: string;
+  /** Evidence-grounded answer to "what is this node in this corpus?" before category mapping. */
+  semanticIdentity?: string;
   semanticExplanation?: string;
   decisionFactors?: string[];
   identityEvidence?: string;
