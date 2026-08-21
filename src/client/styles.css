@@ -229,6 +229,7 @@ select:focus-visible {
 .evidence { margin: 8px 0; padding: 10px; background: #f7f8fa; border: 1px solid var(--border); border-radius: 8px; font-size: 10px; }
 .evidence header { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 5px; }
 .evidence-src { color: var(--accent); font-size: 10px; font-weight: 400; }
+.evidence-open { color: var(--accent); font-size: 9px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .evidence-page { padding: 2px 6px; color: var(--text-secondary); background: #e9e9ed; border-radius: 5px; font-size: 9px; }
 .evidence-status { color: var(--text-tertiary); font-size: 8px; font-weight: 600; }
 .evidence p { margin: 7px 0 !important; color: #424245 !important; font-size: 11px !important; line-height: 1.5 !important; }

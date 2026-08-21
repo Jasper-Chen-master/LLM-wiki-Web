@@ -147,6 +147,7 @@ const copy = {
     language: "Switch language",
     profileRole: "Research blueprint",
     evidenceLabel: "Evidence",
+    openSource: "Open source",
     evidenceFirst: "Evidence-linked research",
     localWorkspace: "Private local workspace",
     wikiVersion: "Wiki revision",
@@ -288,6 +289,7 @@ const copy = {
     language: "切换语言",
     profileRole: "研究蓝图",
     evidenceLabel: "证据",
+    openSource: "打开来源",
     evidenceFirst: "证据可追溯的研究",
     localWorkspace: "本地私有工作空间",
     wikiVersion: "Wiki 版本",
@@ -1265,6 +1267,10 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
     () => new Map(snapshot.documents.map((d) => [d.id, d.fileName])),
     [snapshot.documents],
   );
+  const documentsById = useMemo(
+    () => new Map(snapshot.documents.map((document) => [document.id, document])),
+    [snapshot.documents],
+  );
   const related = selected
     ? snapshot.nodes.filter(
         (n) =>
@@ -1490,6 +1496,21 @@ function GraphView({ snapshot }: { snapshot: ProjectSnapshot }) {
                         <span className="evidence-src">
                           {docNames.get(item.documentId) ?? t.source}
                         </span>
+                        {(() => {
+                          const document = documentsById.get(item.documentId);
+                          if (!document) return null;
+                          const pageHash = document.kind === "pdf" ? `#page=${item.page}` : "";
+                          return (
+                            <a
+                              className="evidence-open"
+                              href={`/api/projects/${snapshot.project.id}/documents/${item.documentId}/content${pageHash}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {t.openSource}
+                            </a>
+                          );
+                        })()}
                         <span className="evidence-page">{lang === "zh" ? `第 ${item.page} 页` : `${t.page} ${item.page}`}</span>
                         <span className="evidence-status">{item.status === "observed" ? t.observed : item.status === "inferred" ? t.inferred : t.reported}</span>
                       </header>
