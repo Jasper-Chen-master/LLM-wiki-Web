@@ -5,7 +5,7 @@ The MVP is a local TypeScript web application: React/Vite renders the workspace 
 ```text
 React UI → Express API → Application services → filesystem repository
                               ├─ document parsing (PDF/DOCX)
-                              ├─ LLM provider abstraction (DeepSeek / demo fallback)
+                              ├─ LLM provider abstraction (OpenRouter / DeepSeek V4 Flash / demo fallback)
                               └─ graph, evidence, search, export services
 ```
 
@@ -83,7 +83,7 @@ The browser polls a lightweight latest-job endpoint while processing and reloads
 
 Long AI stages expose real sub-stage batch progress through `ProcessingJob.batchProgress`: corpus analysis, plan generation, relevance filtering, knowledge extraction, node understanding, and one controlled classification pass each report completed/total batches plus an updating elapsed time. The top-level percentage is derived from completed batches rather than wall-clock interpolation, so a slow provider response remains visibly alive without falsely claiming work was completed. The UI localizes these structured fields instead of parsing server message text.
 
-Transport failures and structured-output failures have separate retry boundaries. DeepSeek owns bounded retry for timeouts, rate limits, and temporary server failures; `generateStructured` retries only when a received response fails JSON/schema validation. A network failure therefore cannot accidentally multiply the full transport retry sequence through the schema-repair loop. A malformed understanding or classification item is ignored and its extracted controlled type remains usable; it does not trigger a separate recovery classification request or a user-facing warning.
+Transport failures and structured-output failures have separate retry boundaries. The OpenRouter provider owns bounded retry for timeouts, rate limits, and temporary server failures; `generateStructured` retries only when a received response fails JSON/schema validation. A network failure therefore cannot accidentally multiply the full transport retry sequence through the schema-repair loop. A malformed understanding or classification item is ignored and its extracted controlled type remains usable; it does not trigger a separate recovery classification request or a user-facing warning.
 
 Jobs remain in-process for the MVP. On server startup, any non-terminal persisted job is marked failed with an interruption explanation so it cannot masquerade indefinitely as a live worker. Parsed documents and completed graph data remain available for a safe retry. A future durable queue can replace this recovery rule without changing the `ProcessingJob` contract.
 

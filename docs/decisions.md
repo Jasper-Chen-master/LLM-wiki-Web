@@ -4,9 +4,9 @@
 
 Use a filesystem repository and in-process job runner for the MVP. This makes the complete workflow runnable with no database or cloud account while preserving repository and job interfaces for a later migration.
 
-## 2026-08-13 — Optional DeepSeek, never an implicit dependency
+## 2026-08-24 — OpenRouter-backed DeepSeek provider, never an implicit dependency
 
-DeepSeek is accessed only through `LLMProvider`. Missing configuration activates a clearly marked deterministic demo provider; it does not claim model-derived facts. Production use should set `DEEPSEEK_API_KEY` and replace/demo-check extraction quality.
+DeepSeek V4 Flash is accessed through OpenRouter and only through `LLMProvider`. The application uses the OpenAI-compatible OpenRouter chat-completions endpoint, while model, endpoint, and optional attribution headers remain configuration-driven. Missing `OPENROUTER_API_KEY` activates a clearly marked deterministic demo provider; it does not claim model-derived facts.
 
 ## 2026-08-17 — Analyze the corpus before defining Wiki categories
 

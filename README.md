@@ -9,7 +9,7 @@ npm.cmd install --cache .npm-cache
 npm.cmd run dev
 ```
 
-Open `http://localhost:5173`. The API runs on `http://localhost:3001`. Copy `.env.example` to `.env` to configure DeepSeek (the current MVP otherwise uses a clearly labelled local demo extractor).
+Open `http://localhost:5173`. The API runs on `http://localhost:3001`. Copy `.env.example` to `.env` and fill in `OPENROUTER_API_KEY` to use OpenRouter with DeepSeek V4 Flash (the current MVP otherwise uses a clearly labelled local demo extractor).
 
 ## Workflow
 

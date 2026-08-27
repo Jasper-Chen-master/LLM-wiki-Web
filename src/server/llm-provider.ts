@@ -50,8 +50,14 @@ export class DemoLLMProvider implements LLMProvider {
   }
 }
 
-export class DeepSeekProvider implements LLMProvider {
-  constructor(private readonly apiKey: string, private readonly baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com", private readonly model = process.env.DEEPSEEK_MODEL ?? "deepseek-chat") {}
+export class OpenRouterProvider implements LLMProvider {
+  constructor(
+    private readonly apiKey: string,
+    private readonly baseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+    private readonly model = process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-v4-flash",
+    private readonly siteUrl = process.env.OPENROUTER_SITE_URL,
+    private readonly siteName = process.env.OPENROUTER_SITE_NAME ?? "LLM Wiki",
+  ) {}
   async generate(request: GenerateRequest): Promise<GenerateResult> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -60,7 +66,12 @@ export class DeepSeekProvider implements LLMProvider {
         const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           signal: controller.signal,
-          headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+            ...(this.siteUrl ? { "HTTP-Referer": this.siteUrl } : {}),
+            "X-OpenRouter-Title": this.siteName,
+          },
           body: JSON.stringify({
             model: this.model,
             temperature: request.temperature ?? 0,
@@ -70,12 +81,12 @@ export class DeepSeekProvider implements LLMProvider {
           }),
         });
         if (!response.ok) {
-          if (response.status < 500 && response.status !== 429) throw new NonRetryableProviderError(`DeepSeek request failed (${response.status})`);
-          throw new Error(`DeepSeek temporary failure (${response.status})`);
+          if (response.status < 500 && response.status !== 429) throw new NonRetryableProviderError(`OpenRouter request failed (${response.status})`);
+          throw new Error(`OpenRouter temporary failure (${response.status})`);
         }
         const body: unknown = await response.json(); const text = (body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-        if (typeof text !== "string" || !text.trim()) throw new Error("DeepSeek returned no message content");
-        return { text, provider: "deepseek" };
+        if (typeof text !== "string" || !text.trim()) throw new Error("OpenRouter returned no message content");
+        return { text, provider: "openrouter" };
       } catch (error) {
         if (error instanceof NonRetryableProviderError) throw error;
         lastError = error;
@@ -83,14 +94,17 @@ export class DeepSeekProvider implements LLMProvider {
       }
       finally { clearTimeout(timeout); }
     }
-    throw new Error(`DeepSeek remained unavailable after 3 attempts: ${lastError instanceof Error ? lastError.message : "network failure"}`);
+    throw new Error(`OpenRouter remained unavailable after 3 attempts: ${lastError instanceof Error ? lastError.message : "network failure"}`);
   }
 }
 
 class NonRetryableProviderError extends Error {}
 
 export function createLLMProvider(environment: NodeJS.ProcessEnv = process.env): LLMProvider {
-  return environment.DEEPSEEK_API_KEY ? new DeepSeekProvider(environment.DEEPSEEK_API_KEY, environment.DEEPSEEK_BASE_URL, environment.DEEPSEEK_MODEL) : new DemoLLMProvider();
+  const apiKey = environment.OPENROUTER_API_KEY?.trim();
+  return apiKey
+    ? new OpenRouterProvider(apiKey, environment.OPENROUTER_BASE_URL, environment.OPENROUTER_MODEL, environment.OPENROUTER_SITE_URL, environment.OPENROUTER_SITE_NAME)
+    : new DemoLLMProvider();
 }
 
 const profilePrompt = (text: string) => `
