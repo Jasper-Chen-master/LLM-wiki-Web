@@ -1,3 +1,7 @@
+// Side-effect imports must live in the one module that renders KaTeX output,
+// so both the mhchem extension and the stylesheet load exactly once per bundle.
+import "katex/contrib/mhchem/mhchem.js";
+import "katex/dist/katex.min.css";
 import katex from "katex";
 import { toWikiLatex } from "../math-rendering";
 
