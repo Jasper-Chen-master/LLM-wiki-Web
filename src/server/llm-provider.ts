@@ -54,7 +54,7 @@ export class OpenRouterProvider implements LLMProvider {
   constructor(
     private readonly apiKey: string,
     private readonly baseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-    private readonly model = process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-v4-flash",
+    private readonly model = process.env.OPENROUTER_MODEL ?? "z-ai/glm-5.3-flash",
     private readonly siteUrl = process.env.OPENROUTER_SITE_URL,
     private readonly siteName = process.env.OPENROUTER_SITE_NAME ?? "LLM Wiki",
   ) {}
