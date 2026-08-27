@@ -334,6 +334,7 @@ export class SafePipelineProvider implements PipelineProvider {
       const budget = stageBudget(profile, "extraction");
       const batches = chunksByTextBudget(blocks, block => Math.min(block.text.length, budget.itemChars), budget);
       await report({ phase: "extraction", completed: 0, total: batches.length });
+      const batchErrors: string[] = [];
       const outputs = await mapWithConcurrency(batches, pipelineConcurrency(profile), async batch => {
         const evidenceMap = batch.map(block => ({
           blockId: block.id, documentId: block.documentId, page: block.page,
@@ -348,7 +349,8 @@ export class SafePipelineProvider implements PipelineProvider {
             temperature: 0,
             maxTokens: 8_000,
           }, extractionSchema, 1);
-        } catch {
+        } catch (error) {
+          batchErrors.push(error instanceof Error ? error.message : String(error));
           return undefined;
         }
         if (!output.entities.length && evidenceMap.length) {
@@ -359,7 +361,8 @@ export class SafePipelineProvider implements PipelineProvider {
               temperature: 0,
               maxTokens: 8_000,
             }, extractionSchema, 1);
-          } catch {
+          } catch (error) {
+            batchErrors.push(error instanceof Error ? error.message : String(error));
             return undefined;
           }
         }
@@ -368,6 +371,11 @@ export class SafePipelineProvider implements PipelineProvider {
       for (const output of outputs) if (output) {
         aggregate.entities.push(...output.entities);
         aggregate.relations.push(...output.relations);
+      }
+      // A silently empty extraction is indistinguishable from an empty corpus and leaves the
+      // user with an unexplained "no entities found" build. Surface total extraction failure.
+      if (!aggregate.entities.length && batchErrors.length && batches.length) {
+        throw new Error(`Extraction failed for all ${batches.length} batch(es); first error: ${batchErrors[0]}`);
       }
       const normalizedEntityKey = (entity: { name: string; canonicalName?: string }) =>
         (entity.canonicalName ?? entity.name).normalize("NFKC").trim().toLocaleLowerCase();

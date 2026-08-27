@@ -61,8 +61,28 @@ export class OpenRouterProvider implements LLMProvider {
   async generate(request: GenerateRequest): Promise<GenerateResult> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45_000);
+      const controller = new AbortController();
+      // Long structured completions can exceed any fixed wall clock, and non-streaming
+      // requests risk being dropped while sitting idle waiting for the model. Streaming
+      // keeps bytes flowing and turns the ceiling into an *idle* limit: every received
+      // event resets the timer, so slow-but-alive generations still complete.
+      const idleMs = Number(process.env.OPENROUTER_TIMEOUT_MS) || 120_000;
+      const maxMs = Number(process.env.OPENROUTER_MAX_TIMEOUT_MS) || 900_000;
+      const startedAt = Date.now();
+      let idleTimer = setTimeout(() => controller.abort(), idleMs);
+      const maxTimer = setTimeout(() => controller.abort(), maxMs);
+      const resetIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => controller.abort(), idleMs);
+      };
       try {
+        // Reasoning-capable models (GLM family) spend completion budget on hidden
+        // thinking before any visible content exists. Without an explicit reasoning
+        // ceiling the entire max_tokens allowance can be consumed by thinking alone,
+        // producing a valid-but-empty response. Bound thinking separately and grant
+        // the requested content budget on top; providers without reasoning support
+        // ignore the hint harmlessly.
+        const reasoningBudget = Number(process.env.OPENROUTER_REASONING_MAX_TOKENS) || 2_000;
         const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           signal: controller.signal,
@@ -77,22 +97,46 @@ export class OpenRouterProvider implements LLMProvider {
             temperature: request.temperature ?? 0,
             messages: [{ role: "system", content: request.system ?? "You are a precise research assistant." }, { role: "user", content: request.prompt }],
             ...(request.responseFormat ? { response_format: { type: request.responseFormat } } : {}),
-            ...(request.maxTokens ? { max_tokens: request.maxTokens } : {}),
+            ...(request.maxTokens
+              ? { max_tokens: request.maxTokens + reasoningBudget, reasoning: { max_tokens: reasoningBudget } }
+              : {}),
+            stream: true,
           }),
         });
         if (!response.ok) {
           if (response.status < 500 && response.status !== 429) throw new NonRetryableProviderError(`OpenRouter request failed (${response.status})`);
           throw new Error(`OpenRouter temporary failure (${response.status})`);
         }
-        const body: unknown = await response.json(); const text = (body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-        if (typeof text !== "string" || !text.trim()) throw new Error("OpenRouter returned no message content");
+        if (!response.body) throw new Error("OpenRouter returned no response body");
+        let text = "";
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for await (const chunk of response.body) {
+          resetIdle();
+          buffer += decoder.decode(chunk as Uint8Array, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":") || !trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: unknown } }> };
+              const delta = event.choices?.[0]?.delta?.content;
+              if (typeof delta === "string") text += delta;
+            } catch { /* ignore malformed keepalive events */ }
+          }
+        }
+        void startedAt;
+        if (!text.trim()) throw new Error("OpenRouter returned no message content");
         return { text, provider: "openrouter" };
       } catch (error) {
         if (error instanceof NonRetryableProviderError) throw error;
         lastError = error;
         if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 700 * 2 ** attempt));
       }
-      finally { clearTimeout(timeout); }
+      finally { clearTimeout(idleTimer); clearTimeout(maxTimer); }
     }
     throw new Error(`OpenRouter remained unavailable after 3 attempts: ${lastError instanceof Error ? lastError.message : "network failure"}`);
   }
