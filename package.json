@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "start": "node --env-file=.env dist-server/server/index.js",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run src"
+    "test": "vitest run src",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true}); require('node:fs').rmSync('dist-server',{recursive:true,force:true}); console.log('cleaned dist/ and dist-server/')\""
   },
   "dependencies": {
     "cors": "^2.8.5",

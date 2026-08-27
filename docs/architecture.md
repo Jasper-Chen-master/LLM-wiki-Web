@@ -5,7 +5,7 @@ The MVP is a local TypeScript web application: React/Vite renders the workspace 
 ```text
 React UI → Express API → Application services → filesystem repository
                               ├─ document parsing (PDF/DOCX)
-                              ├─ LLM provider abstraction (OpenRouter / DeepSeek V4 Flash / demo fallback)
+                              ├─ LLM provider abstraction (OpenRouter / z-ai GLM 5.3 Flash / demo fallback)
                               └─ graph, evidence, search, export services
 ```
 
